@@ -1,0 +1,13 @@
+# Laravel (backend)
+sistem-bimbel/vendor/
+sistem-bimbel/node_modules/
+sistem-bimbel/storage/
+sistem-bimbel/.env
+
+# React (frontend)
+bimbel-frontend/node_modules/
+bimbel-frontend/dist/
+
+# OS / Editor
+.vscode/
+.DS_Store
