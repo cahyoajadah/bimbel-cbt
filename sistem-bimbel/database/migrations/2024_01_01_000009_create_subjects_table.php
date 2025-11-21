@@ -11,10 +11,21 @@ return new class extends Migration
     {
         Schema::create('subjects', function (Blueprint $table) {
             $table->id();
+            
+            // Data Utama
             $table->string('name');
-            $table->string('code')->unique();
+            $table->string('code')->unique()->nullable(); 
             $table->text('description')->nullable();
-            $table->foreignId('program_id')->nullable()->constrained('programs')->onDelete('set null');
+            
+            // Relasi ke Program (PENTING: Pastikan ini ada di sini)
+            $table->foreignId('program_id')
+                  ->nullable()
+                  ->constrained('programs')
+                  ->onDelete('set null');
+            
+            // Status Aktif (PENTING: Tambahkan ini agar tidak error 'column not found')
+            $table->boolean('is_active')->default(true); 
+            
             $table->timestamps();
         });
     }

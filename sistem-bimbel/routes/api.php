@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Api\Admin\PackageController;
 use App\Http\Controllers\Api\Admin\SubjectController as AdminSubjectController;
 use App\Http\Controllers\Api\Admin\MaterialController;
+use App\Http\Controllers\Api\Admin\ProgramController;
 use App\Http\Controllers\Api\Admin\ScheduleController;
 use App\Http\Controllers\Api\Admin\TeacherController;
 use App\Http\Controllers\Api\Admin\StudentController;
@@ -69,6 +70,7 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
 
         // Subject (Mata Pelajaran)
         Route::apiResource('subjects', AdminSubjectController::class);
+        Route::apiResource('programs', ProgramController::class);
         
         // Teachers (Pembimbing)
         Route::apiResource('teachers', TeacherController::class);

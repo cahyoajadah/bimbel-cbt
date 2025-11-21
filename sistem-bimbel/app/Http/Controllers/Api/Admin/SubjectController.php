@@ -11,9 +11,9 @@ class SubjectController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Subject::query();
+        // Tambahkan with('program') agar nama program bisa diambil di frontend
+        $query = Subject::with('program'); 
         
-        // Filter pencarian jika ada
         if ($request->has('search')) {
             $query->where('name', 'like', '%' . $request->search . '%');
         }
@@ -29,7 +29,8 @@ class SubjectController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:subjects,name',
+            'program_id' => 'required|exists:programs,id', // <--- Validasi baru
+            'name' => 'required|string|max:255',
             'code' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'is_active' => 'boolean'
@@ -53,12 +54,14 @@ class SubjectController extends Controller
         $subject = Subject::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:subjects,name,' . $id,
+            'program_id' => 'required|exists:programs,id', // <--- Validasi baru
+            'name' => 'required|string|max:255',
             'code' => 'nullable|string|max:50',
             'description' => 'nullable|string',
             'is_active' => 'boolean'
         ]);
 
+        // ... (sisanya sama, update $subject)
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }

@@ -180,4 +180,10 @@ export const adminService = {
     const response = await api.delete(`/admin/subjects/${id}`);
     return response.data;
   },
+  
+  // Programs (Pastikan endpoint ini ada di backend Anda, atau buat ProgramController sederhana)
+  getPrograms: async () => {
+    const response = await api.get('/admin/programs'); 
+    return response.data;
+  },
 };

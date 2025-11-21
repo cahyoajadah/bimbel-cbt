@@ -16,13 +16,12 @@ class SubjectController extends Controller
      */
     public function index(Request $request)
     {
-        $subjects = Subject::with('program')
-            ->withCount('materials')
-            ->get();
-
+        $query = Subject::with('materials')
+                    ->where('is_active', true);
+        
         return response()->json([
-            'success' => true,
-            'data' => $subjects
+        'success' => true,
+        'data' => $query->get()
         ]);
     }
 
