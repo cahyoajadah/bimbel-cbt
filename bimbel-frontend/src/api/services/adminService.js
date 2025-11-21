@@ -43,11 +43,14 @@ export const adminService = {
     return response.data;
   },
 
+
   createMaterial: async (data) => {
     let payload;
+    
     if (data instanceof FormData) {
         payload = data;
     } else {
+        // Jika masih JSON biasa, baru kita ubah jadi FormData
         const formData = new FormData();
         Object.keys(data).forEach((key) => {
             if (data[key] !== null && data[key] !== undefined) {
@@ -57,7 +60,6 @@ export const adminService = {
         payload = formData;
     }
 
-    // Axios akan otomatis mengatur Content-Type jika mendeteksi FormData
     const response = await api.post(API_ENDPOINTS.MATERIALS, payload);
     return response.data;
   },

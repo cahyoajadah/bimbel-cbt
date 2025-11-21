@@ -111,32 +111,39 @@ export default function AdminMaterials() {
     setIsModalOpen(true);
   };
 
+  // src/pages/admin/Materials.jsx
+
+  // src/pages/admin/Materials.jsx
+
   const onSubmit = (data) => {
     try {
-      // Kita buat FormData manual di sini agar kontrol file lebih mudah
       const formData = new FormData();
 
-      // 1. Append Field Text Wajib
+      // 1. Append Data Text (Pastikan semua ini ada)
+      formData.append('subject_id', data.subject_id);
       formData.append('title', data.title);
-      formData.append('type', data.type); // Pastikan ini 'pdf', 'video', atau 'link'
-      formData.append('subject_id', data.subject_id); // <--- INI PENTING (Sesuai Error)
-      formData.append('grade', data.grade || ''); 
+      formData.append('type', data.type);
+      formData.append('grade', data.grade || '');
+      formData.append('description', data.description || '');
+      formData.append('order', data.order || 0);
+      formData.append('duration_minutes', data.duration_minutes || 0);
       formData.append('is_active', data.is_active ? '1' : '0');
 
-      // 2. Append File / Content
-      if (data.type === 'pdf' || data.type === 'document') {
-         // Cek apakah user upload file baru?
-         if (data.file && data.file[0]) {
-            formData.append('file', data.file[0]); 
+      // 2. Append File PDF (INI PERBAIKAN UTAMANYA)
+      if (data.type === 'pdf') {
+         // PERHATIKAN: Gunakan 'data.pdf_file', BUKAN 'data.file'
+         if (data.pdf_file && data.pdf_file[0]) {
+            // PERHATIKAN: Kirim dengan key 'pdf_file', BUKAN 'file'
+            formData.append('pdf_file', data.pdf_file[0]); 
          }
       } else {
-         // Jika tipe Link/Video
+         // Jika Video/Link
          formData.append('content', data.content);
       }
 
-      // 3. Eksekusi Service
+      // 3. Kirim ke Service
       if (editingMaterial) {
-         formData.append('_method', 'PUT'); // Trick agar Laravel terima file di mode update
+         formData.append('_method', 'PUT'); // Wajib untuk update file di Laravel
          updateMutation.mutate({ id: editingMaterial.id, data: formData });
       } else {
          createMutation.mutate(formData);
@@ -144,6 +151,7 @@ export default function AdminMaterials() {
 
     } catch (error) {
       console.error("Form Error:", error);
+      toast.error("Gagal menyusun data form");
     }
   };
 
