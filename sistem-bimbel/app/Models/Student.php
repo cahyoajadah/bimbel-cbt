@@ -1,6 +1,8 @@
 <?php
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory; // Tambahkan ini jika perlu
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -8,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Student extends Model
 {
+    use HasFactory; // Tambahkan trait ini
+
     protected $fillable = [
         'user_id', 'student_number', 'birth_date', 'address',
         'school', 'parent_name', 'parent_phone', 
@@ -24,12 +28,15 @@ class Student extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function programs(): HasMany
+    // [PERBAIKAN UTAMA DI SINI]
+    // Ubah dari HasMany menjadi BelongsToMany
+    public function programs(): BelongsToMany
     {
-        return $this->belongsToMany(StudentProgram::class)
-                    ->withTimestamps(); // <--- Pastikan ada ini
+        return $this->belongsToMany(Program::class, 'student_programs')
+                    ->withTimestamps();
     }
 
+    // Relasi lain biarkan tetap sama...
     public function packages(): BelongsToMany
     {
         return $this->belongsToMany(Package::class, 'student_packages')
@@ -69,6 +76,7 @@ class Student extends Model
         return $this->hasMany(QuestionReport::class);
     }
 
+    // Helper atribut untuk frontend (opsional, tapi membantu)
     public function getPrimaryProgramAttribute()
     {
         return $this->programs->first();

@@ -21,16 +21,38 @@ class CBTController extends Controller
      */
     public function availableTryouts(Request $request)
     {
-        $student = $request->user()->student;
-        
-        $tryouts = QuestionPackage::with('program')
+        $user = $request->user();
+        $student = $user->student;
+
+        if (!$student) {
+            return response()->json(['message' => 'Data siswa tidak ditemukan'], 404);
+        }
+
+        // 1. Ambil ID Program Siswa (Array)
+        $studentProgramIds = $student->programs()->pluck('programs.id');
+
+        // 2. Query ke QuestionPackage (Bukan Package biasa)
+        $packages = QuestionPackage::with(['program', 'questions'])
             ->where('is_active', true)
-            ->where('total_questions', '>', 0)
-            ->get();
+            ->whereIn('program_id', $studentProgramIds) // <--- FILTER KUNCI
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($pkg) {
+                return [
+                    'id' => $pkg->id,
+                    'name' => $pkg->name,
+                    'program' => $pkg->program->name ?? '-',
+                    'description' => $pkg->description,
+                    'total_questions' => $pkg->questions->count(), // Hitung real dari relasi
+                    'duration_minutes' => $pkg->duration_minutes,
+                    'passing_score' => $pkg->passing_score,
+                    'already_attempted' => false, // Nanti bisa dikembangkan cek history
+                ];
+            });
 
         return response()->json([
             'success' => true,
-            'data' => $tryouts
+            'data' => $packages
         ]);
     }
 

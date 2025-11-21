@@ -2,6 +2,7 @@
 // ============================================
 // app/Http/Controllers/Api/Student/SubjectController.php
 // ============================================
+
 namespace App\Http\Controllers\Api\Student;
 
 use App\Http\Controllers\Controller;
@@ -12,29 +13,47 @@ use Illuminate\Http\Request;
 class SubjectController extends Controller
 {
     /**
-     * Get all subjects (card view)
+     * Get all subjects (Filtered by Student Program)
      */
     public function index(Request $request)
     {
-        $query = Subject::with('materials')
-                    ->where('is_active', true);
+        // 1. Ambil data siswa
+        $student = $request->user()->student;
+
+        if (!$student) {
+            return response()->json(['message' => 'Data siswa tidak ditemukan'], 404);
+        }
+
+        // 2. Ambil ID Program yang diambil siswa
+        $studentProgramIds = $student->programs()->pluck('programs.id');
+
+        // 3. Query Subject dengan Filter Program
+        $query = Subject::with('program') // Load nama program untuk UI
+                    ->withCount('materials') // Opsional: hitung jumlah materi
+                    ->where('is_active', true)
+                    ->whereIn('program_id', $studentProgramIds); // <--- FILTER UTAMA
         
         return response()->json([
-        'success' => true,
-        'data' => $query->get()
+            'success' => true,
+            'data' => $query->get()
         ]);
     }
 
     /**
-     * Get subject detail
+     * Get subject detail (Secured)
      */
     public function show(Request $request, $id)
     {
         $student = $request->user()->student;
+        $studentProgramIds = $student->programs()->pluck('programs.id');
         
+        // Cari subject, tapi pastikan program_id nya cocok dengan siswa
         $subject = Subject::with(['program', 'materials' => function($query) {
-            $query->where('is_active', true)->orderBy('order');
-        }])->findOrFail($id);
+                $query->where('is_active', true)->orderBy('order');
+            }])
+            ->where('is_active', true)
+            ->whereIn('program_id', $studentProgramIds) // <--- SECURITY CHECK
+            ->firstOrFail(); // Gunakan firstOrFail agar return 404 jika akses ditolak/tidak ada
 
         // Add student progress info
         $materials = $subject->materials->map(function($material) use ($student) {
@@ -64,13 +83,19 @@ class SubjectController extends Controller
     }
 
     /**
-     * Get materials for a subject
+     * Get materials for a subject (Secured)
      */
     public function getMaterials(Request $request, $id)
     {
         $student = $request->user()->student;
+        $studentProgramIds = $student->programs()->pluck('programs.id');
         
-        $subject = Subject::findOrFail($id);
+        // Cek akses subject dulu sebelum ambil materi
+        $subject = Subject::where('id', $id)
+            ->where('is_active', true)
+            ->whereIn('program_id', $studentProgramIds) // <--- SECURITY CHECK
+            ->firstOrFail();
+
         $materials = $subject->materials()
             ->where('is_active', true)
             ->orderBy('order')
@@ -115,6 +140,9 @@ class SubjectController extends Controller
         $student = $request->user()->student;
         $material = Material::findOrFail($id);
 
+        // Validasi tambahan: pastikan materi ini milik subject yang boleh diakses siswa
+        // (Opsional tapi disarankan untuk keamanan tingkat tinggi)
+        
         $request->validate([
             'progress_percentage' => 'nullable|integer|min:0|max:100',
         ]);

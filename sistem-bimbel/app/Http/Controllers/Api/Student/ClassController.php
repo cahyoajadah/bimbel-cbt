@@ -11,20 +11,28 @@ use Illuminate\Http\Request;
 class ClassController extends Controller
 {
     /**
-     * Get all classes
+     * Get all classes (Filtered by Student Program)
      */
     public function index(Request $request)
     {
+        $user = $request->user();
+        $student = $user->student;
+
+        if (!$student) {
+            return response()->json(['message' => 'Data siswa tidak ditemukan'], 404);
+        }
+
+        // 1. Ambil ID Program milik Siswa
+        $studentProgramIds = $student->programs()->pluck('programs.id');
+
+        // 2. Filter Jadwal berdasarkan Program Siswa
         $query = Schedule::where('type', 'class')
             ->where('is_active', true)
+            ->whereIn('program_id', $studentProgramIds) // <--- FILTER OTOMATIS DI SINI
             ->with(['program', 'teacher.user']);
 
         if ($request->has('class_type')) {
             $query->where('class_type', $request->class_type);
-        }
-
-        if ($request->has('program_id')) {
-            $query->where('program_id', $request->program_id);
         }
 
         $classes = $query->orderBy('start_time', 'desc')
@@ -37,12 +45,22 @@ class ClassController extends Controller
     }
 
     /**
-     * Get upcoming classes
+     * Get upcoming classes (Filtered by Student Program)
      */
     public function upcoming(Request $request)
     {
+        $user = $request->user();
+        $student = $user->student;
+
+        if (!$student) {
+            return response()->json(['data' => []]);
+        }
+
+        $studentProgramIds = $student->programs()->pluck('programs.id');
+
         $classes = Schedule::where('type', 'class')
             ->where('is_active', true)
+            ->whereIn('program_id', $studentProgramIds) // <--- FILTER OTOMATIS
             ->where('start_time', '>=', now())
             ->with(['program', 'teacher.user'])
             ->orderBy('start_time')
@@ -56,13 +74,17 @@ class ClassController extends Controller
     }
 
     /**
-     * Join class (get Zoom link)
+     * Join class (Check permission)
      */
     public function join(Request $request, $id)
     {
         $student = $request->user()->student;
+        $studentProgramIds = $student->programs()->pluck('programs.id');
+
+        // Pastikan kelas yang mau di-join sesuai program siswa
         $class = Schedule::where('type', 'class')
             ->where('is_active', true)
+            ->whereIn('program_id', $studentProgramIds) // <--- VALIDASI AKSES
             ->findOrFail($id);
 
         if ($class->class_type !== 'zoom' || !$class->zoom_link) {
@@ -72,7 +94,6 @@ class ClassController extends Controller
             ], 400);
         }
 
-        // Record participation
         $class->participants()->syncWithoutDetaching([
             $student->id => [
                 'is_attended' => true,
@@ -92,11 +113,19 @@ class ClassController extends Controller
     }
 
     /**
-     * Get schedules (both tryout and class)
+     * Get all schedules (Tryout & Class) - Filtered
      */
     public function schedules(Request $request)
     {
+        $student = $request->user()->student;
+        if (!$student) {
+            return response()->json(['data' => []]);
+        }
+
+        $studentProgramIds = $student->programs()->pluck('programs.id');
+
         $query = Schedule::where('is_active', true)
+            ->whereIn('program_id', $studentProgramIds) // <--- FILTER OTOMATIS
             ->with(['program', 'teacher.user']);
 
         if ($request->has('type')) {
@@ -107,7 +136,6 @@ class ClassController extends Controller
             $query->where('class_type', $request->class_type);
         }
 
-        // Filter by date range
         if ($request->has('start_date')) {
             $query->where('start_time', '>=', $request->start_date);
         }

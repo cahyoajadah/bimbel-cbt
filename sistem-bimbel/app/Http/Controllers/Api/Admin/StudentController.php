@@ -82,7 +82,11 @@ class StudentController extends Controller
                 'parent_phone' => $request->parent_phone,
             ]);
 
-            $student->programs()->attach($request->program_id);
+            // 3. Attach Program dengan Tanggal Mulai Hari Ini
+            $student->programs()->attach($request->program_id, [
+                'start_date' => now(), // <--- Tambahkan ini
+                'is_active' => true
+            ]);
             DB::commit();
 
             return response()->json([
@@ -139,7 +143,14 @@ class StudentController extends Controller
                 'birth_date', 'school', 'parent_name', 'parent_phone'
             ]));
 
-            $student->programs()->sync([$request->program_id]);
+            //$student->programs()->sync([$request->program_id]);
+            // Update Program (Ganti yang lama dengan yang baru + reset tanggal mulai)
+            $student->programs()->sync([
+                $request->program_id => [
+                    'start_date' => now(), // <--- Tambahkan ini
+                    'is_active' => true
+                ]
+            ]);
 
             DB::commit();
 

@@ -60,7 +60,10 @@ class AdminSeeder extends Seeder
 
         // [PENTING] Hubungkan Siswa ke Program via Tabel Pivot
         if ($program) {
-            $studentProfile->programs()->attach($program->id);
+            $studentProfile->programs()->attach($program->id, [
+                'start_date' => now(), // <--- Tambahkan ini
+                'is_active' => true
+            ]);
         }
     }
 }
