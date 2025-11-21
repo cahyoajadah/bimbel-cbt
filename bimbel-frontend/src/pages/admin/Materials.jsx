@@ -66,6 +66,12 @@ export default function AdminMaterials() {
       toast.success('Materi berhasil diperbarui');
     },
   });
+  const { data: subjectsData } = useQuery({
+    queryKey: ['admin-subjects-list'],
+    queryFn: () => adminService.getSubjects({ page: 1, per_page: 100 }), // Ambil semua subject
+  });
+  
+  const subjects = subjectsData?.data?.data || [];
 
   // Delete mutation
   const deleteMutation = useMutation({
@@ -106,29 +112,38 @@ export default function AdminMaterials() {
   };
 
   const onSubmit = (data) => {
-    // Handle file upload for PDF
-    if (data.type === 'pdf') {
+    try {
+      // Kita buat FormData manual di sini agar kontrol file lebih mudah
       const formData = new FormData();
-      Object.keys(data).forEach((key) => {
-        if (key === 'pdf_file' && data[key]?.[0]) {
-          formData.append('pdf_file', data[key][0]);
-        } else if (data[key] !== null && data[key] !== undefined && key !== 'pdf_file') {
-          formData.append(key, data[key]);
-        }
-      });
-      
-      if (editingMaterial) {
-        updateMutation.mutate({ id: editingMaterial.id, data: formData });
+
+      // 1. Append Field Text Wajib
+      formData.append('title', data.title);
+      formData.append('type', data.type); // Pastikan ini 'pdf', 'video', atau 'link'
+      formData.append('subject_id', data.subject_id); // <--- INI PENTING (Sesuai Error)
+      formData.append('grade', data.grade || ''); 
+      formData.append('is_active', data.is_active ? '1' : '0');
+
+      // 2. Append File / Content
+      if (data.type === 'pdf' || data.type === 'document') {
+         // Cek apakah user upload file baru?
+         if (data.file && data.file[0]) {
+            formData.append('file', data.file[0]); 
+         }
       } else {
-        createMutation.mutate(formData);
+         // Jika tipe Link/Video
+         formData.append('content', data.content);
       }
-    } else {
-      // For video type (YouTube URL)
+
+      // 3. Eksekusi Service
       if (editingMaterial) {
-        updateMutation.mutate({ id: editingMaterial.id, data });
+         formData.append('_method', 'PUT'); // Trick agar Laravel terima file di mode update
+         updateMutation.mutate({ id: editingMaterial.id, data: formData });
       } else {
-        createMutation.mutate(data);
+         createMutation.mutate(formData);
       }
+
+    } catch (error) {
+      console.error("Form Error:", error);
     }
   };
 
@@ -256,13 +271,27 @@ export default function AdminMaterials() {
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Input
-            label="Subject ID"
-            type="number"
-            required
-            error={errors.subject_id?.message}
-            {...register('subject_id', { required: 'Subject ID wajib diisi' })}
-          />
+          {/* --- GANTI INI --- */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Mata Pelajaran <span className="text-red-500">*</span>
+            </label>
+            <select
+              className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+              {...register('subject_id', { required: 'Mata Pelajaran wajib dipilih' })}
+            >
+              <option value="">-- Pilih Mata Pelajaran --</option>
+              {subjects.map((subj) => (
+                <option key={subj.id} value={subj.id}>
+                  {subj.name} {subj.program ? `(${subj.program.name})` : ''}
+                </option>
+              ))}
+            </select>
+            {errors.subject_id && (
+              <p className="mt-1 text-sm text-red-600">{errors.subject_id.message}</p>
+            )}
+          </div>
+          {/* ----------------- */}
 
           <Input
             label="Judul Materi"
