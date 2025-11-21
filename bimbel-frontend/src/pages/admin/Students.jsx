@@ -1,7 +1,7 @@
 // src/pages/admin/Students.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Users, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Search } from 'lucide-react';
 import { adminService } from '../../api/services/adminService';
 import { Button } from '../../components/common/Button';
 import { Table, Pagination } from '../../components/common/Table';
@@ -15,142 +15,150 @@ export default function AdminStudents() {
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [search, setSearch] = useState('');
 
+  // 1. Fetch Data Students
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-students', currentPage, searchQuery],
-    queryFn: () => adminService.getStudents({ 
-      page: currentPage, 
-      per_page: 15,
-      search: searchQuery 
-    }),
+    queryKey: ['admin-students', currentPage, search],
+    queryFn: () => adminService.getStudents({ page: currentPage, search }),
+  });
+
+  // 2. Fetch Data Programs (Untuk Dropdown)
+  const { data: programsData } = useQuery({
+    queryKey: ['admin-programs-list'],
+    queryFn: () => adminService.getPrograms(), 
   });
 
   const students = data?.data?.data || [];
-  const pagination = data?.data?.meta || data?.data;
+  const pagination = data?.data || {};
+  const programs = programsData?.data || [];
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
-    defaultValues: {
-      name: '',
-      email: '',
-      password: '',
-      phone: '',
-      birth_date: '',
-      school: '',
-      parent_name: '',
-      parent_phone: '',
-    },
-  });
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
 
+  // Mutations
   const createMutation = useMutation({
     mutationFn: adminService.createStudent,
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-students']);
-      setIsModalOpen(false);
-      reset();
-      toast.success('Siswa berhasil dibuat');
+      handleCloseModal();
+      toast.success('Siswa berhasil ditambahkan');
     },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal menyimpan'),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => adminService.updateStudent(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-students']);
-      setIsModalOpen(false);
-      setEditingStudent(null);
-      reset();
-      toast.success('Siswa berhasil diperbarui');
+      handleCloseModal();
+      toast.success('Data siswa diperbarui');
     },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal update'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: adminService.deleteStudent,
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-students']);
-      toast.success('Siswa berhasil dihapus');
+      toast.success('Siswa dihapus');
     },
   });
 
+  // Handlers
   const handleOpenModal = (student = null) => {
     if (student) {
       setEditingStudent(student);
-      reset({
-        name: student.user?.name || '',
-        email: student.user?.email || '',
-        phone: student.user?.phone || '',
-        birth_date: student.birth_date || '',
-        school: student.school || '',
-        parent_name: student.parent_name || '',
-        parent_phone: student.parent_phone || '',
-      });
+      // Set form values dari data yang ada
+      setValue('name', student.user?.name);
+      setValue('email', student.user?.email);
+      setValue('phone', student.user?.phone); // HP Siswa
+      
+      setValue('school', student.school);
+      setValue('birth_date', student.birth_date); // Tanggal Lahir
+      setValue('parent_name', student.parent_name); // Nama Ortu
+      setValue('parent_phone', student.parent_phone); // HP Ortu
+      
+      // Ambil program pertama
+      if (student.programs && student.programs.length > 0) {
+          setValue('program_id', student.programs[0].id);
+      } else {
+          setValue('program_id', '');
+      }
     } else {
       setEditingStudent(null);
-      reset();
+      reset({
+        name: '', 
+        email: '', 
+        password: '', 
+        phone: '',
+        school: '', 
+        birth_date: '',
+        parent_name: '',
+        parent_phone: '',
+        program_id: ''
+      });
     }
     setIsModalOpen(true);
   };
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingStudent(null);
+    reset();
+  };
+
   const onSubmit = (data) => {
     if (editingStudent) {
+      if (!data.password) delete data.password;
       updateMutation.mutate({ id: editingStudent.id, data });
     } else {
       createMutation.mutate(data);
     }
   };
 
-  const handleDelete = (student) => {
-    showConfirm({
-      title: 'Hapus Siswa',
-      message: `Apakah Anda yakin ingin menghapus siswa "${student.user?.name}"?`,
-      type: 'danger',
-      confirmText: 'Hapus',
-      onConfirm: () => deleteMutation.mutate(student.id),
-    });
-  };
-
   const columns = [
-    {
-      header: 'No. Siswa',
-      accessor: 'student_number',
+    { 
+      header: 'Siswa', 
+      render: (row) => (
+        <div>
+            <div className="font-medium text-gray-900">{row.user?.name}</div>
+            <div className="text-xs text-gray-500">{row.school || 'Sekolah belum diisi'}</div>
+        </div>
+      )
     },
-    {
-      header: 'Nama',
-      render: (row) => row.user?.name || '-',
+    { 
+        header: 'Program', 
+        render: (row) => (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {row.programs?.[0]?.name || '-'}
+            </span>
+        )
     },
-    {
-      header: 'Email',
-      render: (row) => row.user?.email || '-',
-    },
-    {
-      header: 'Sekolah',
-      accessor: 'school',
-    },
-    {
-      header: 'Kehadiran',
-      accessor: 'total_attendance',
-    },
-    {
-      header: 'Skor Terakhir',
-      render: (row) => row.last_tryout_score || '-',
+    { 
+      header: 'Orang Tua', 
+      render: (row) => (
+        <div>
+            <div className="text-sm text-gray-900">{row.parent_name || '-'}</div>
+            <div className="text-xs text-gray-500">{row.parent_phone || '-'}</div>
+        </div>
+      )
     },
     {
       header: 'Aksi',
       render: (row) => (
-        <div className="flex items-center space-x-2">
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Trash2}
-            onClick={() => handleDelete(row)}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            Hapus
-          </Button>
+        <div className="flex space-x-2">
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>Edit</Button>
+          <Button size="sm" variant="ghost" icon={Trash2} 
+            onClick={() => showConfirm({
+                title: 'Hapus Siswa',
+                message: 'Yakin hapus data siswa ini?',
+                type: 'danger',
+                confirmText: 'Hapus',
+                onConfirm: () => deleteMutation.mutate(row.id)
+            })} 
+            className="text-red-600 hover:bg-red-50">Hapus</Button>
         </div>
       ),
     },
@@ -160,102 +168,90 @@ export default function AdminStudents() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Siswa</h1>
-          <p className="mt-1 text-sm text-gray-600">Kelola data siswa</p>
+          <h1 className="text-2xl font-bold text-gray-900">Data Siswa</h1>
+          <p className="text-sm text-gray-600">Kelola akun, data orang tua, dan program siswa</p>
         </div>
-        <Button icon={Plus} onClick={() => handleOpenModal()}>
-          Tambah Siswa
-        </Button>
+        <Button icon={Plus} onClick={() => handleOpenModal()}>Tambah Siswa</Button>
       </div>
 
-      {/* Search */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Cari siswa..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      {/* Search Bar */}
+      <div className="flex items-center space-x-2 bg-white p-4 rounded-lg shadow-sm">
+        <Search className="w-5 h-5 text-gray-400" />
+        <input 
+            type="text" 
+            placeholder="Cari nama, email, atau nama ortu..." 
+            className="flex-1 border-none focus:ring-0 text-sm"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <div className="bg-white rounded-lg shadow">
         <Table columns={columns} data={students} loading={isLoading} />
-        {pagination && (
-          <Pagination
-            currentPage={pagination.current_page || currentPage}
+        <Pagination
+            currentPage={pagination.current_page || 1}
             totalPages={pagination.last_page || 1}
             onPageChange={setCurrentPage}
             perPage={pagination.per_page || 15}
             total={pagination.total || 0}
-          />
-        )}
+        />
       </div>
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingStudent(null);
-          reset();
-        }}
+        onClose={handleCloseModal}
         title={editingStudent ? 'Edit Siswa' : 'Tambah Siswa Baru'}
-        size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Input
-            label="Nama Lengkap"
-            required
-            error={errors.name?.message}
-            {...register('name', { required: 'Nama wajib diisi' })}
-          />
-          <Input
-            label="Email"
-            type="email"
-            required
-            error={errors.email?.message}
-            {...register('email', { required: 'Email wajib diisi' })}
-          />
-          {!editingStudent && (
-            <Input
-              label="Password"
-              type="password"
-              required
-              error={errors.password?.message}
-              {...register('password', { required: 'Password wajib diisi', minLength: 6 })}
-            />
-          )}
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="No. Telepon" {...register('phone')} />
-            <Input label="Tanggal Lahir" type="date" {...register('birth_date')} />
+          
+          {/* --- DATA AKUN --- */}
+          <div className="bg-gray-50 p-3 rounded-lg mb-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Data Akun</h3>
+            <div className="space-y-3">
+              <Input label="Nama Lengkap Siswa" required {...register('name', { required: 'Wajib diisi' })} />
+              <Input label="Email" type="email" required {...register('email', { required: 'Wajib diisi' })} />
+              <Input label="No. HP Siswa (Opsional)" {...register('phone')} />
+              
+              {!editingStudent && (
+                <Input label="Password" type="password" required {...register('password', { required: 'Wajib diisi', minLength: { value: 8, message: 'Min 8 karakter' } })} error={errors.password?.message} />
+              )}
+            </div>
           </div>
-          <Input label="Sekolah" {...register('school')} />
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Nama Orang Tua" {...register('parent_name')} />
-            <Input label="No. Telepon Orang Tua" {...register('parent_phone')} />
+
+          {/* --- DATA PROGRAM --- */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+                Program Belajar <span className="text-red-500">*</span>
+            </label>
+            <select
+                className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                {...register('program_id', { required: 'Program wajib dipilih' })}
+            >
+                <option value="">-- Pilih Program --</option>
+                {programs.map((prog) => (
+                    <option key={prog.id} value={prog.id}>{prog.name}</option>
+                ))}
+            </select>
+            {errors.program_id && <p className="text-red-500 text-xs mt-1">{errors.program_id.message}</p>}
+          </div>
+
+          {/* --- DATA PRIBADI & ORTU --- */}
+          <div className="bg-gray-50 p-3 rounded-lg mt-4">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Data Pribadi & Orang Tua</h3>
+            <div className="space-y-3">
+              <Input label="Asal Sekolah" {...register('school')} />
+              <Input label="Tanggal Lahir" type="date" {...register('birth_date')} />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input label="Nama Orang Tua" {...register('parent_name')} />
+                <Input label="No. HP Orang Tua" {...register('parent_phone')} />
+              </div>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setIsModalOpen(false);
-                setEditingStudent(null);
-                reset();
-              }}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              loading={createMutation.isPending || updateMutation.isPending}
-            >
-              {editingStudent ? 'Perbarui' : 'Simpan'}
-            </Button>
+            <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
           </div>
         </form>
       </Modal>

@@ -26,7 +26,8 @@ class Student extends Model
 
     public function programs(): HasMany
     {
-        return $this->hasMany(StudentProgram::class);
+        return $this->belongsToMany(StudentProgram::class)
+                    ->withTimestamps(); // <--- Pastikan ada ini
     }
 
     public function packages(): BelongsToMany
@@ -66,5 +67,10 @@ class Student extends Model
     public function questionReports(): HasMany
     {
         return $this->hasMany(QuestionReport::class);
+    }
+
+    public function getPrimaryProgramAttribute()
+    {
+        return $this->programs->first();
     }
 }

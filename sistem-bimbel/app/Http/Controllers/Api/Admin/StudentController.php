@@ -18,7 +18,7 @@ class StudentController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Student::with('user');
+        $query = Student::with(['user', 'programs']);
 
         if ($request->has('search')) {
             $search = $request->search;
@@ -42,6 +42,7 @@ class StudentController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
+            'program_id' => 'required|exists:programs,id', // <--- Wajib pilih program
             'phone' => 'nullable|string|max:20',
             'birth_date' => 'nullable|date',
             'school' => 'nullable|string|max:255',
@@ -81,6 +82,7 @@ class StudentController extends Controller
                 'parent_phone' => $request->parent_phone,
             ]);
 
+            $student->programs()->attach($request->program_id);
             DB::commit();
 
             return response()->json([
@@ -137,6 +139,8 @@ class StudentController extends Controller
                 'birth_date', 'school', 'parent_name', 'parent_phone'
             ]));
 
+            $student->programs()->sync([$request->program_id]);
+
             DB::commit();
 
             return response()->json([
@@ -157,7 +161,14 @@ class StudentController extends Controller
     public function destroy($id)
     {
         $student = Student::findOrFail($id);
-        $student->user->delete(); // Cascade will delete student
+        $student->programs()->detach();
+
+        if ($student->user) {
+            $student->user->delete();
+        } else {
+            // Fallback jika user tidak ditemukan, hapus student saja
+            $student->delete();
+        }
 
         return response()->json([
             'success' => true,
