@@ -159,4 +159,25 @@ export const adminService = {
     const response = await api.delete(`${API_ENDPOINTS.FEEDBACKS}/${id}`);
     return response.data;
   },
+
+  // Subjects Management
+  getSubjects: async (params) => {
+    const response = await api.get('/admin/subjects', { params });
+    return response.data;
+  },
+
+  createSubject: async (data) => {
+    const response = await api.post('/admin/subjects', data);
+    return response.data;
+  },
+
+  updateSubject: async (id, data) => {
+    const response = await api.put(`/admin/subjects/${id}`, data);
+    return response.data;
+  },
+
+  deleteSubject: async (id) => {
+    const response = await api.delete(`/admin/subjects/${id}`);
+    return response.data;
+  },
 };

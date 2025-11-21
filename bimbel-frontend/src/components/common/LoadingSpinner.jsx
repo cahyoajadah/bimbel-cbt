@@ -1,6 +1,8 @@
 // ============================================
 // src/components/common/LoadingSpinner.jsx
 // ============================================
+import clsx from 'clsx'; // <--- TAMBAHKAN BARIS INI (PENTING!)
+
 export const LoadingSpinner = ({ size = 'md', text = '' }) => {
   const sizes = {
     sm: 'h-4 w-4',

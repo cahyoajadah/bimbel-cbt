@@ -12,6 +12,7 @@ import NotFound from '../pages/NotFound';
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard'; // to be created
 import AdminPackages from '../pages/admin/Packages';
+import AdminSubjects from '../pages/admin/Subjects';
 import AdminMaterials from '../pages/admin/Materials'; // to be created
 import AdminSchedules from '../pages/admin/Schedules'; // to be created
 import AdminTeachers from '../pages/admin/Teachers'; // to be created
@@ -76,6 +77,7 @@ function AppRoutes() {
                   <Routes>
                     <Route path="dashboard" element={<AdminDashboard />} />
                     <Route path="packages" element={<AdminPackages />} />
+                    <Route path="subjects" element={<AdminSubjects />} />
                     <Route path="materials" element={<AdminMaterials />} />
                     <Route path="schedules" element={<AdminSchedules />} />
                     <Route path="teachers" element={<AdminTeachers />} />

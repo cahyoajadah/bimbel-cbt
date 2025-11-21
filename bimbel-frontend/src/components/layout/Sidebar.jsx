@@ -1,7 +1,7 @@
 // src/components/layout/Sidebar.jsx
 import { Link, useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard, Package, BookOpen, Calendar, Users, 
+  LayoutDashboard, Package, Book, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
   Clock, TrendingUp, User, X, Menu
 } from 'lucide-react';
@@ -12,6 +12,7 @@ const menuItems = {
   admin: [
     { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/admin/packages', icon: Package, label: 'Paket Tryout' },
+    { path: '/admin/subjects', icon: Book, label: 'Mata Pelajaran' },
     { path: '/admin/materials', icon: BookOpen, label: 'Materi' },
     { path: '/admin/schedules', icon: Calendar, label: 'Jadwal' },
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },

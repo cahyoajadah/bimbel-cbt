@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Api\Admin\PackageController;
+use App\Http\Controllers\Api\Admin\SubjectController as AdminSubjectController;
 use App\Http\Controllers\Api\Admin\MaterialController;
 use App\Http\Controllers\Api\Admin\ScheduleController;
 use App\Http\Controllers\Api\Admin\TeacherController;
@@ -15,7 +16,7 @@ use App\Http\Controllers\Api\QuestionMaker\QuestionPackageController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionReportController;
 use App\Http\Controllers\Api\Student\StudentDashboardController;
-use App\Http\Controllers\Api\Student\SubjectController;
+use App\Http\Controllers\Api\Student\SubjectController as StudentSubjectController;
 use App\Http\Controllers\Api\Student\ClassController;
 use App\Http\Controllers\Api\Student\CBTController;
 use App\Http\Controllers\Api\Public\LandingController;
@@ -65,6 +66,9 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         
         // Schedules (Jadwal Tryout & Kelas)
         Route::apiResource('schedules', ScheduleController::class);
+
+        // Subject (Mata Pelajaran)
+        Route::apiResource('subjects', AdminSubjectController::class);
         
         // Teachers (Pembimbing)
         Route::apiResource('teachers', TeacherController::class);
@@ -117,10 +121,10 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         Route::get('dashboard', [StudentDashboardController::class, 'index']);
         
         // Subjects & Materials (Mata Pelajaran)
-        Route::get('subjects', [SubjectController::class, 'index']);
-        Route::get('subjects/{id}', [SubjectController::class, 'show']);
-        Route::get('subjects/{id}/materials', [SubjectController::class, 'getMaterials']);
-        Route::post('materials/{id}/complete', [SubjectController::class, 'completeMaterial']);
+        Route::get('subjects', [StudentSubjectController::class, 'index']);
+        Route::get('subjects/{id}', [StudentSubjectController::class, 'show']);
+        Route::get('subjects/{id}/materials', [StudentSubjectController::class, 'getMaterials']);
+        Route::post('materials/{id}/complete', [StudentSubjectController::class, 'completeMaterial']);
         
         // Classes (Kelas Live)
         Route::get('classes', [ClassController::class, 'index']);

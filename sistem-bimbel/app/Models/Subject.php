@@ -10,7 +10,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Subject extends Model
 {
-    protected $fillable = ['name', 'code', 'description', 'program_id'];
+    protected $fillable = [
+        'program_id', // <--- TAMBAHKAN INI
+        'name',
+        'code',
+        'description',
+        'is_active'
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean', // Pastikan ini ada agar true/false terbaca benar
+    ];
 
     public function program(): BelongsTo
     {

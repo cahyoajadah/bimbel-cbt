@@ -8,6 +8,7 @@ import { useUIStore } from '../../store/uiStore';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../api/services/authService';
 import { useMutation } from '@tanstack/react-query';
+import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
 export const Header = () => {

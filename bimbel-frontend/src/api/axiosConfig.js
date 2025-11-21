@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -13,7 +13,27 @@ const axiosInstance = axios.create({
     'Accept': 'application/json',
   },
   timeout: 30000, // 30 seconds
+  withCredentials: true, // Important for sending cookies
 });
+
+// Function to get CSRF token
+// src/api/axiosConfig.js
+
+// ... (kode import dan deklarasi API_BASE_URL biarkan saja)
+
+// --- TAMBAHKAN/GANTI FUNGSI INI ---
+export const getCsrfToken = async () => {
+  // Kita harus menghapus '/api' dari URL dasar khusus untuk request ini
+  // Agar request mengarah ke http://localhost:8000/sanctum/csrf-cookie
+  const rootUrl = API_BASE_URL.replace('/api', ''); 
+
+  await axiosInstance.get('/sanctum/csrf-cookie', {
+    baseURL: rootUrl,       // Override Base URL agar tidak ada prefix /api
+    withCredentials: true,  // Wajib true agar cookie tersimpan di browser
+  });
+};
+
+// ... (kode interceptors dan export default biarkan saja)
 
 // Request interceptor - Add token
 axiosInstance.interceptors.request.use(

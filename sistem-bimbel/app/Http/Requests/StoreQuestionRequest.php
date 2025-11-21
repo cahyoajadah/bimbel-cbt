@@ -21,6 +21,7 @@ class StoreQuestionRequest extends FormRequest
             'options' => 'required|array|min:2|max:5',
             'options.*.label' => 'required|in:A,B,C,D,E',
             'options.*.text' => 'required|string|max:1000',
+            'options.*.is_correct' => 'required|boolean',
         ];
     }
 

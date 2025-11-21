@@ -39,7 +39,9 @@ export default function Questions() {
 
   const questions = questionsData?.questions || [];
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+  // ... imports
+// Tambahkan watch dan setValue dari useForm
+const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
     defaultValues: {
       question_text: '',
       duration_seconds: 120,
@@ -54,6 +56,23 @@ export default function Questions() {
       ],
     },
   });
+
+// Tambahkan ini untuk memantau perubahan nilai options secara realtime
+  const watchedOptions = watch('options');
+  
+  const handleCorrectOptionChange = (selectedIndex) => {
+    // Ambil semua options saat ini
+    const currentOptions = watchedOptions;
+    
+    // Update semua options: yang dipilih jadi true, sisanya false
+    const updatedOptions = currentOptions.map((opt, index) => ({
+        ...opt,
+        is_correct: index === selectedIndex
+    }));
+
+    // Update nilai form secara manual
+    setValue('options', updatedOptions);
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
@@ -236,56 +255,65 @@ export default function Questions() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Durasi (detik)"
-              type="number"
-              required
-              {...register('duration_seconds', { required: true })}
-            />
-            <Input
-              label="Poin"
-              type="number"
-              step="0.01"
-              required
-              {...register('point', { required: true })}
-            />
-          </div>
+          {/* ... bagian question_text tetap sama ... */}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Opsi Jawaban <span className="text-red-500">*</span>
-            </label>
-            <div className="space-y-3">
-              {['A', 'B', 'C', 'D', 'E'].map((label, index) => (
-                <div key={label} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
+<div className="grid grid-cols-2 gap-4">
+    <Input
+        label="Durasi (detik)"
+        type="number"
+        required
+        // Tambahkan valueAsNumber agar dikirim sebagai integer, bukan string (Mencegah Error 422)
+        {...register('duration_seconds', { required: true, valueAsNumber: true })}
+    />
+    <Input
+        label="Poin"
+        type="number"
+        step="0.01"
+        required
+        // Tambahkan valueAsNumber agar dikirim sebagai angka (Mencegah Error 422)
+        {...register('point', { required: true, valueAsNumber: true })}
+      />
+  </div>
+
+  <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+          Opsi Jawaban <span className="text-red-500">*</span>
+      </label>
+      <div className="space-y-3">
+          {/* Gunakan field yang di dalam useForm fields atau map manual index 0-4 */}
+          {['A', 'B', 'C', 'D', 'E'].map((label, index) => (
+              <div key={label} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
                   <div className="flex items-center mt-2">
-                    <input
-                      type="radio"
-                      name="correct_answer"
-                      className="w-4 h-4"
-                      {...register(`options.${index}.is_correct`)}
-                    />
+                      {/* PERBAIKAN LOGIC RADIO BUTTON */}
+                      <input
+                          type="radio"
+                          name="correct_answer_group" // Grouping visual
+                          className="w-4 h-4 cursor-pointer text-blue-600 focus:ring-blue-500"
+                          // Cek apakah index ini yang 'is_correct' nya true
+                          checked={watchedOptions?.[index]?.is_correct === true}
+                          // Saat diklik, jalankan fungsi manual kita
+                          onChange={() => handleCorrectOptionChange(index)}
+                      />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Opsi {label}
-                    </label>
-                    <input
-                      type="hidden"
-                      value={label}
-                      {...register(`options.${index}.label`)}
-                    />
-                    <textarea
-                      rows={2}
-                      className="block w-full rounded border border-gray-300 px-3 py-2"
-                      placeholder={`Teks untuk opsi ${label}`}
-                      {...register(`options.${index}.text`, { required: true })}
-                    />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Opsi {label}
+                      </label>
+                      <input
+                          type="hidden"
+                          value={label}
+                          {...register(`options.${index}.label`)}
+                      />
+                      <textarea
+                          rows={2}
+                          className="block w-full rounded border border-gray-300 px-3 py-2"
+                          placeholder={`Teks untuk opsi ${label}`}
+                          {...register(`options.${index}.text`, { required: "Teks opsi wajib diisi" })}
+                      />
                   </div>
-                </div>
-              ))}
-            </div>
+              </div>
+          ))}
+      </div>
             <p className="mt-2 text-xs text-gray-500">
               * Pilih salah satu opsi sebagai jawaban yang benar
             </p>
