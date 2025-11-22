@@ -170,8 +170,20 @@ class AuthController extends Controller
      */
     public function profile(Request $request)
     {
-        $user = $request->user()->load('role');
+        // 1. Ambil user yang sedang login
+        $user = $request->user();
         
+        // 2. Jika dia siswa, load relasi programs-nya
+        if ($user->isStudent() && $user->student) {
+            // Load relasi:
+            // - role: untuk cek hak akses
+            // - student.programs: untuk ambil data program dari tabel pivot
+            $user->load(['role', 'student.programs']);
+        } else {
+            $user->load('role');
+        }
+        
+        // 3. Siapkan struktur data respons
         $userData = [
             'id' => $user->id,
             'name' => $user->name,
@@ -182,6 +194,7 @@ class AuthController extends Controller
             'role_display' => $user->role->display_name,
         ];
 
+        // 4. Masukkan data siswa & programnya
         if ($user->isStudent() && $user->student) {
             $userData['student'] = [
                 'student_number' => $user->student->student_number,
@@ -192,6 +205,16 @@ class AuthController extends Controller
                 'parent_phone' => $user->student->parent_phone,
                 'total_attendance' => $user->student->total_attendance,
                 'last_tryout_score' => $user->student->last_tryout_score,
+                
+                // [PENTING] Masukkan data program di sini
+                // Kita ambil seluruh array programs
+                'programs' => $user->student->programs->map(function($program) {
+                    return [
+                        'id' => $program->id,
+                        'name' => $program->name,
+                        'code' => $program->code
+                    ];
+                }),
             ];
         }
 

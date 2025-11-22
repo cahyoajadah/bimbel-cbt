@@ -70,23 +70,24 @@ export default function AdminStudents() {
   const handleOpenModal = (student = null) => {
     if (student) {
       setEditingStudent(student);
-      // Set form values dari data yang ada
+      // Isi form dengan data siswa yang diedit
       setValue('name', student.user?.name);
       setValue('email', student.user?.email);
       setValue('phone', student.user?.phone); // HP Siswa
       
       setValue('school', student.school);
-      setValue('birth_date', student.birth_date); // Tanggal Lahir
-      setValue('parent_name', student.parent_name); // Nama Ortu
-      setValue('parent_phone', student.parent_phone); // HP Ortu
+      setValue('birth_date', student.birth_date); 
+      setValue('parent_name', student.parent_name); 
+      setValue('parent_phone', student.parent_phone); 
       
-      // Ambil program pertama
+      // Ambil program pertama yang dimiliki siswa (jika ada)
       if (student.programs && student.programs.length > 0) {
           setValue('program_id', student.programs[0].id);
       } else {
           setValue('program_id', '');
       }
     } else {
+      // Reset form untuk siswa baru
       setEditingStudent(null);
       reset({
         name: '', 
@@ -109,10 +110,18 @@ export default function AdminStudents() {
     reset();
   };
 
+  // --- PERBAIKAN UTAMA DI SINI (onSubmit) ---
   const onSubmit = (data) => {
     if (editingStudent) {
-      if (!data.password) delete data.password;
-      updateMutation.mutate({ id: editingStudent.id, data });
+      // Clone data agar tidak mengubah object asli
+      const payload = { ...data };
+      
+      // Hapus password dari payload jika kosong (agar tidak kena validasi min:8 di backend)
+      if (!payload.password) {
+        delete payload.password;
+      }
+
+      updateMutation.mutate({ id: editingStudent.id, data: payload });
     } else {
       createMutation.mutate(data);
     }
@@ -120,14 +129,15 @@ export default function AdminStudents() {
 
   const columns = [
     { 
-      header: 'Siswa', 
+      header: 'Nama Siswa', 
       render: (row) => (
         <div>
             <div className="font-medium text-gray-900">{row.user?.name}</div>
-            <div className="text-xs text-gray-500">{row.school || 'Sekolah belum diisi'}</div>
+            <div className="text-xs text-gray-500">{row.student_number}</div>
         </div>
       )
     },
+    { header: 'Email', render: (row) => row.user?.email },
     { 
         header: 'Program', 
         render: (row) => (
@@ -136,15 +146,7 @@ export default function AdminStudents() {
             </span>
         )
     },
-    { 
-      header: 'Orang Tua', 
-      render: (row) => (
-        <div>
-            <div className="text-sm text-gray-900">{row.parent_name || '-'}</div>
-            <div className="text-xs text-gray-500">{row.parent_phone || '-'}</div>
-        </div>
-      )
-    },
+    { header: 'Asal Sekolah', accessor: 'school' },
     {
       header: 'Aksi',
       render: (row) => (
@@ -153,7 +155,7 @@ export default function AdminStudents() {
           <Button size="sm" variant="ghost" icon={Trash2} 
             onClick={() => showConfirm({
                 title: 'Hapus Siswa',
-                message: 'Yakin hapus data siswa ini?',
+                message: 'Yakin hapus data siswa ini? Akun pengguna juga akan dihapus.',
                 type: 'danger',
                 confirmText: 'Hapus',
                 onConfirm: () => deleteMutation.mutate(row.id)
@@ -212,8 +214,22 @@ export default function AdminStudents() {
               <Input label="Email" type="email" required {...register('email', { required: 'Wajib diisi' })} />
               <Input label="No. HP Siswa (Opsional)" {...register('phone')} />
               
-              {!editingStudent && (
-                <Input label="Password" type="password" required {...register('password', { required: 'Wajib diisi', minLength: { value: 8, message: 'Min 8 karakter' } })} error={errors.password?.message} />
+              {/* Password Field: Wajib untuk user baru, Opsional untuk edit */}
+              {!editingStudent ? (
+                <Input 
+                  label="Password" 
+                  type="password" 
+                  required 
+                  {...register('password', { required: 'Wajib diisi', minLength: { value: 8, message: 'Min 8 karakter' } })} 
+                  error={errors.password?.message} 
+                />
+              ) : (
+                <Input 
+                  label="Password Baru (Kosongkan jika tidak ingin mengubah)" 
+                  type="password" 
+                  {...register('password', { minLength: { value: 8, message: 'Min 8 karakter' } })} 
+                  error={errors.password?.message} 
+                />
               )}
             </div>
           </div>
@@ -251,7 +267,9 @@ export default function AdminStudents() {
 
           <div className="flex justify-end space-x-2 pt-4">
             <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
-            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
+              {editingStudent ? 'Perbarui' : 'Simpan'}
+            </Button>
           </div>
         </form>
       </Modal>

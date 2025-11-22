@@ -1,188 +1,122 @@
-// ============================================
 // src/pages/student/Classes.jsx
-// ============================================
-import { useQuery } from '@tanstack/react-query';
-import { Video, MapPin, Clock, ExternalLink, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { Video, Calendar, Clock, User, MapPin } from 'lucide-react';
+import { studentService } from '../../api/services/studentService';
 import { Button } from '../../components/common/Button';
-import api from '../../api/axiosConfig';
-import { API_ENDPOINTS } from '../../api/endpoints';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
-import { formatDateTime } from '../../utils/helpers';
 import toast from 'react-hot-toast';
-import clsx from 'clsx';
+import { format } from 'date-fns';
+import { id as idLocale } from 'date-fns/locale';
 
-export default function Classes() {
-  const { data: upcomingClasses, isLoading } = useQuery({
-    queryKey: ['student-classes-upcoming'],
-    queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.CLASSES_UPCOMING);
-      return res.data.data;
-    },
+export default function StudentClasses() {
+  // 1. Fetch Data dengan Filter 'zoom'
+  const { data, isLoading } = useQuery({
+    queryKey: ['student-classes-live'],
+    queryFn: () => studentService.getClasses({ 
+      class_type: 'zoom', // <--- FILTER PENTING: Hanya ambil kelas Zoom
+      per_page: 20 
+    }),
   });
 
-  const { data: allClasses } = useQuery({
-    queryKey: ['student-classes-all'],
-    queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.CLASSES);
-      return res.data.data;
-    },
-  });
+  const classes = data?.data?.data || [];
 
-  const handleJoinClass = async (classId) => {
-    try {
-      const res = await api.post(API_ENDPOINTS.CLASS_JOIN(classId));
-      const zoomLink = res.data.data.zoom_link;
-      
-      if (zoomLink) {
-        window.open(zoomLink, '_blank');
-        toast.success('Membuka link Zoom...');
+  // Mutation untuk Join Kelas
+  const joinMutation = useMutation({
+    mutationFn: studentService.joinClass,
+    onSuccess: (response) => {
+      // Buka link zoom di tab baru
+      if (response.data?.zoom_link) {
+        window.open(response.data.zoom_link, '_blank');
+        toast.success('Membuka Zoom...');
       } else {
         toast.error('Link Zoom tidak tersedia');
       }
-    } catch (error) {
-      toast.error('Gagal join kelas');
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Gagal join kelas');
     }
+  });
+
+  const handleJoin = (classId) => {
+    joinMutation.mutate(classId);
   };
 
-  if (isLoading) {
-    return <LoadingSpinner text="Memuat kelas..." />;
-  }
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Kelas Live</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Bergabung dengan kelas online atau offline
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Kelas Live (Zoom)</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Jadwal kelas online interaktif kamu
+          </p>
+        </div>
       </div>
 
-      {/* Upcoming Classes */}
-      {upcomingClasses && upcomingClasses.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Kelas Mendatang
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {upcomingClasses.map((classItem) => (
-              <div
-                key={classItem.id}
-                className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-600"
-              >
-                <div className="flex items-start justify-between mb-4">
+      {classes.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg shadow-sm">
+          <Video className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Tidak ada kelas live</h3>
+          <p className="mt-1 text-sm text-gray-500">Belum ada jadwal kelas Zoom untuk saat ini.</p>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {classes.map((item) => (
+            <div key={item.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+              {/* Header Card */}
+              <div className="p-5 border-b border-gray-100 bg-blue-50/50">
+                <div className="flex justify-between items-start">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {classItem.title}
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-2">
+                      {item.program?.name || 'Umum'}
+                    </span>
+                    <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
+                      {item.title}
                     </h3>
-                    {classItem.description && (
-                      <p className="text-sm text-gray-600 mb-3">
-                        {classItem.description}
-                      </p>
-                    )}
                   </div>
-                  <div className={clsx(
-                    'px-3 py-1 rounded-full text-xs font-medium',
-                    classItem.class_type === 'zoom'
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-green-100 text-green-800'
-                  )}>
-                    {classItem.class_type === 'zoom' ? 'Online' : 'Offline'}
+                  <div className="bg-white p-2 rounded-lg shadow-sm">
+                    <Video className="w-5 h-5 text-blue-600" />
                   </div>
                 </div>
-
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <Clock className="w-4 h-4 mr-2" />
-                    {formatDateTime(classItem.start_time)}
-                  </div>
-
-                  {classItem.class_type === 'offline' && classItem.location && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      {classItem.location}
-                    </div>
-                  )}
-
-                  {classItem.teacher && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <span className="font-medium">
-                        Pengajar: {classItem.teacher.user?.name}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {classItem.class_type === 'zoom' && (
-                  <Button
-                    onClick={() => handleJoinClass(classItem.id)}
-                    icon={ExternalLink}
-                    className="w-full"
-                  >
-                    Join Kelas
-                  </Button>
-                )}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* All Classes */}
-      {allClasses && allClasses.data && (
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Semua Kelas
-          </h2>
-          <div className="bg-white rounded-lg shadow">
-            <div className="divide-y divide-gray-200">
-              {allClasses.data.map((classItem) => (
-                <div key={classItem.id} className="p-6 hover:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-start space-x-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                        {classItem.class_type === 'zoom' ? (
-                          <Video className="w-6 h-6 text-blue-600" />
-                        ) : (
-                          <MapPin className="w-6 h-6 text-green-600" />
-                        )}
-                      </div>
-
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
-                          {classItem.title}
-                        </h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {formatDateTime(classItem.start_time)}
-                        </p>
-                        {classItem.class_type === 'offline' && classItem.location && (
-                          <p className="text-sm text-gray-500 mt-1">
-                            📍 {classItem.location}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className={clsx(
-                      'px-3 py-1 rounded-full text-xs font-medium',
-                      classItem.class_type === 'zoom'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-green-100 text-green-800'
-                    )}>
-                      {classItem.class_type === 'zoom' ? 'Online' : 'Offline'}
+              {/* Body Card */}
+              <div className="p-5 space-y-4">
+                {/* Waktu */}
+                <div className="flex items-start space-x-3 text-sm text-gray-600">
+                  <Calendar className="w-4 h-4 mt-0.5 text-gray-400" />
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {format(new Date(item.start_time), 'EEEE, d MMMM yyyy', { locale: idLocale })}
+                    </p>
+                    <div className="flex items-center mt-1 text-blue-600">
+                      <Clock className="w-3 h-3 mr-1" />
+                      {format(new Date(item.start_time), 'HH:mm')} - {format(new Date(item.end_time), 'HH:mm')} WIB
                     </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {(!upcomingClasses || upcomingClasses.length === 0) &&
-       (!allClasses || !allClasses.data || allClasses.data.length === 0) && (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Belum ada kelas tersedia</p>
+                {/* Pengajar */}
+                <div className="flex items-center space-x-3 text-sm text-gray-600">
+                  <User className="w-4 h-4 text-gray-400" />
+                  <span>{item.teacher?.user?.name || 'Pengajar belum ditentukan'}</span>
+                </div>
+
+                {/* Tombol Join */}
+                <Button 
+                  className="w-full mt-4" 
+                  onClick={() => handleJoin(item.id)}
+                  loading={joinMutation.isPending && joinMutation.variables === item.id}
+                  // Disable jika belum waktunya (opsional, hilangkan kondisi disabled jika ingin bisa join kapan saja)
+                  // disabled={new Date() < new Date(item.start_time)} 
+                >
+                  Gabung Zoom
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

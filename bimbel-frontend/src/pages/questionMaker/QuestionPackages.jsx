@@ -39,7 +39,8 @@ export default function QuestionPackages() {
   // Kita bisa menggunakan adminService.getPrograms() karena endpointnya public/shared untuk admin & question maker
   const { data: programsData } = useQuery({
     queryKey: ['programs-list'],
-    queryFn: () => adminService.getPrograms(), 
+    // Gunakan getPublicPrograms agar Pembuat Soal diizinkan akses
+    queryFn: () => adminService.getPublicPrograms(), 
   });
 
   const packages = data?.data?.data || []; // Sesuaikan struktur response pagination

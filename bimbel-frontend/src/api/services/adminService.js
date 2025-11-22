@@ -206,4 +206,9 @@ export const adminService = {
     const response = await api.get('/admin/programs'); 
     return response.data;
   },
+  getPublicPrograms: async () => {
+    // Mengambil dari route '/api/programs' yang bebas akses (asal login)
+    const response = await api.get('/programs'); 
+    return response.data;
+  },
 };
