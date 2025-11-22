@@ -36,7 +36,7 @@ export default function Landing() {
       <nav className="fixed w-full bg-white/80 backdrop-blur-md z-50 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <h1 className="text-2xl font-bold text-blue-600">Bimbel Online</h1>
+            <h1 className="text-2xl font-bold text-blue-600">National Academy</h1>
             <Link
               to="/login"
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -53,7 +53,7 @@ export default function Landing() {
           <div className="text-center">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
               Raih Impianmu Bersama
-              <span className="text-blue-600"> Bimbel Online</span>
+              <span className="text-blue-600"> National Academy</span>
             </h1>
             <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
               Platform bimbingan belajar online terpercaya untuk persiapan UTBK, SKD, dan CPNS
@@ -191,7 +191,7 @@ export default function Landing() {
       <footer className="bg-gray-900 text-white py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-gray-400">
-            © 2025 Bimbel Online. All rights reserved.
+            © 2025 National Academy Taruna Bangsa. All rights reserved.
           </p>
         </div>
       </footer>

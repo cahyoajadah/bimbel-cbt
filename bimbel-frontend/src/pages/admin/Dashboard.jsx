@@ -58,7 +58,7 @@ export default function AdminDashboard() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Dashboard Admin</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Selamat datang di panel administrasi Bimbel Online
+          Selamat datang di panel administrasi National Academy Taruna Bangsa.
         </p>
       </div>
 

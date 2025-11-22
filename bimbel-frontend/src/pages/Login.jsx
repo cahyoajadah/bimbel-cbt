@@ -67,7 +67,7 @@ export default function Login() {
       <div className="max-w-md w-full">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Bimbel Online</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">National Academy</h1>
           <p className="text-blue-100">Masuk ke akun Anda</p>
         </div>
 
