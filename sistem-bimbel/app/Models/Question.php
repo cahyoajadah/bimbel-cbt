@@ -9,11 +9,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Question extends Model
-{
+{  
     protected $fillable = [
-        'question_package_id', 'order_number', 'question_text',
-        'question_image', 'duration_seconds', 'point',
-        'explanation', 'explanation_image'
+        'question_package_id',
+        'question_text',
+        'question_image',
+        'order_number',
+        'type',         
+        'explanation',  
+        'point'         // Default point soal
     ];
 
     protected $casts = ['point' => 'decimal:2'];

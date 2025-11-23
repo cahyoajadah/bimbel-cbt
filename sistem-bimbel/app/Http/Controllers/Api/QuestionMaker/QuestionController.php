@@ -31,84 +31,51 @@ class QuestionController extends Controller
         ]);
     }
 
-    public function store(Request $request, $packageId)
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store(StoreQuestionRequest $request, $packageId)
     {
-        $package = QuestionPackage::findOrFail($packageId);
-
-        $validator = Validator::make($request->all(), [
-            'question_text' => 'required|string',
-            'question_image' => 'nullable|image|max:2048',
-            'duration_seconds' => 'required|integer|min:1',
-            'point' => 'required|numeric|min:0',
-            'explanation' => 'nullable|string',
-            'explanation_image' => 'nullable|image|max:2048',
-            'options' => 'required|array|min:2|max:5',
-            'options.*.label' => 'required|in:A,B,C,D,E',
-            'options.*.text' => 'required|string',
-            'options.*.image' => 'nullable|image|max:2048',
-            'options.*.is_correct' => 'required|boolean',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        // Validasi harus ada 1 jawaban benar
-        $correctCount = collect($request->options)->where('is_correct', true)->count();
-        if ($correctCount !== 1) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Harus ada tepat 1 jawaban yang benar'
-            ], 422);
-        }
-
         DB::beginTransaction();
         try {
-            // Get next order number
-            $lastOrder = $package->questions()->max('order_number') ?? 0;
-
-            $questionData = $request->only([
-                'question_text', 'duration_seconds', 'point', 'explanation'
-            ]);
-            $questionData['question_package_id'] = $packageId;
-            $questionData['order_number'] = $lastOrder + 1;
-
-            // Handle image uploads
+            // 1. Upload Gambar Soal (Jika Ada)
+            $imagePath = null;
             if ($request->hasFile('question_image')) {
-                $questionData['question_image'] = $request->file('question_image')
-                    ->store('questions/images', 'public');
+                $imagePath = $request->file('question_image')->store('questions', 'public');
             }
 
-            if ($request->hasFile('explanation_image')) {
-                $questionData['explanation_image'] = $request->file('explanation_image')
-                    ->store('questions/explanations', 'public');
-            }
+            // 2. Buat Soal
+            $question = Question::create([
+                'question_package_id' => $packageId,
+                'type' => $request->type, // Simpan tipe soal
+                'question_text' => $request->question_text,
+                'question_image' => $imagePath,
+                'point' => $request->point,
+                'order_number' => Question::where('question_package_id', $packageId)->max('order_number') + 1,
+            ]);
 
-            $question = Question::create($questionData);
+            // 3. Buat Opsi Jawaban
+            if ($request->has('options')) {
+                foreach ($request->options as $index => $optionData) {
+                    
+                    // Handle gambar per opsi (karena array, aksesnya agak tricky)
+                    $optionImagePath = null;
+                    if (isset($optionData['option_image']) && $optionData['option_image'] instanceof \Illuminate\Http\UploadedFile) {
+                        $optionImagePath = $optionData['option_image']->store('options', 'public');
+                    }
 
-            // Create answer options
-            foreach ($request->options as $optionData) {
-                $option = [
-                    'question_id' => $question->id,
-                    'option_label' => $optionData['label'],
-                    'option_text' => $optionData['text'],
-                    'is_correct' => $optionData['is_correct'],
-                ];
+                    // Tentukan Label (A, B, C...) atau Kosong jika Isian Singkat
+                    $label = $request->type === 'short' ? null : chr(65 + $index); // 65 = A
 
-                if (isset($optionData['image']) && $optionData['image'] instanceof \Illuminate\Http\UploadedFile) {
-                    $option['option_image'] = $optionData['image']
-                        ->store('questions/options', 'public');
+                    $question->answerOptions()->create([
+                        'option_label' => $label,
+                        'option_text' => $optionData['option_text'] ?? '', // Bisa kosong jika cuma gambar
+                        'option_image' => $optionImagePath,
+                        'is_correct' => filter_var($optionData['is_correct'], FILTER_VALIDATE_BOOLEAN),
+                        'weight' => $optionData['weight'] ?? 0, // Simpan bobot (default 0)
+                    ]);
                 }
-
-                AnswerOption::create($option);
             }
-
-            // Update total questions in package
-            $package->increment('total_questions');
 
             DB::commit();
 

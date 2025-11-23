@@ -10,11 +10,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AnswerOption extends Model
 {
     protected $fillable = [
-        'question_id', 'option_label', 'option_text',
-        'option_image', 'is_correct'
+        'question_id',
+        'option_label', // A, B, C, dll
+        'option_text',
+        'option_image',
+        'is_correct',
+        'weight',       // <--- Tambahkan kolom ini
     ];
 
-    protected $casts = ['is_correct' => 'boolean'];
+    protected $casts = [
+        'is_correct' => 'boolean',
+        'weight' => 'integer', // <--- Casting ke integer
+    ];
 
     public function question(): BelongsTo
     {

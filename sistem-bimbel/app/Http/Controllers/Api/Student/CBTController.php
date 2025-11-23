@@ -297,35 +297,47 @@ class CBTController extends Controller
         ->where('student_id', $student->id)
         ->findOrFail($resultId);
 
-        $review = $result->cbtSession->answers->map(function($answer) {
+        // 1. FORMATTING QUESTIONS (Data Soal & Jawaban)
+        $formattedQuestions = $result->cbtSession->answers->map(function($answer) {
             $question = $answer->question;
             $correctOption = $question->answerOptions->where('is_correct', true)->first();
             
             return [
-                'question_number' => $question->order_number,
+                'id' => $question->id,
                 'question_text' => $question->question_text,
                 'question_image' => $question->question_image,
-                'your_answer' => $answer->answerOption ? $answer->answerOption->option_label : null,
-                'correct_answer' => $correctOption->option_label,
-                'is_correct' => $answer->is_correct,
-                'point_earned' => $answer->point_earned,
-                'explanation' => $question->explanation,
-                'explanation_image' => $question->explanation_image,
+                'discussion' => $question->explanation,
+                'student_answer_id' => $answer->answer_option_id,
+                'correct_answer_id' => $correctOption ? $correctOption->id : null,
                 'options' => $question->answerOptions->map(function($option) {
                     return [
+                        'id' => $option->id,
                         'label' => $option->option_label,
                         'text' => $option->option_text,
-                        'is_correct' => $option->is_correct,
+                        'image' => $option->option_image,
                     ];
-                }),
+                })->values(),
             ];
-        });
+        })->values();
+
+        // 2. FORMAT DURASI (FIX MINUS / 23 JAM)
+        // Gunakan abs() untuk memastikan durasi selalu positif
+        $seconds = abs($result->duration_seconds); 
+        
+        $minutes = floor($seconds / 60);
+        $remainingSeconds = $seconds % 60;
+
+        // Format string: "10 Menit 30 Detik"
+        $durationString = $minutes . ' Menit ' . $remainingSeconds . ' Detik';
 
         return response()->json([
             'success' => true,
             'data' => [
-                'result' => $result,
-                'review' => $review,
+                'score' => $result->total_score,
+                'correct_answers_count' => $result->correct_answers,
+                'total_questions' => $result->total_questions,
+                'duration_taken' => $durationString, // Sudah bersih dari minus
+                'questions' => $formattedQuestions
             ]
         ]);
     }

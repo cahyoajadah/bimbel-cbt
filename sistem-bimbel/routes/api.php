@@ -143,7 +143,8 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         // CBT / Tryout
         Route::get('tryouts', [CBTController::class, 'availableTryouts']);
         Route::post('tryouts/{packageId}/start', [CBTController::class, 'startSession']);
-        Route::get('tryout-results/{resultId}/review', [CBTController::class, 'reviewResult']);
+        //Route::get('tryout-results/{resultId}/review', [CBTController::class, 'reviewResult']);
+        Route::get('tryout-results/{resultId}', [CBTController::class, 'reviewResult']);
         Route::post('questions/report', [CBTController::class, 'reportQuestion']);
     });
 

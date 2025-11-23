@@ -11,17 +11,21 @@ class StoreQuestionRequest extends FormRequest
         return $this->user()->hasRole('pembuat_soal');
     }
 
-    public function rules()
+    public function rules(): array
     {
         return [
-            'question_text' => 'required|string|max:5000',
+            'question_package_id' => 'required|exists:question_packages,id',
+            'type' => 'required|in:single,multiple,weighted,short', // Validasi Tipe
+            'question_text' => 'required|string',
             'question_image' => 'nullable|image|max:2048',
-            'duration_seconds' => 'required|integer|min:1|max:3600',
-            'point' => 'required|numeric|min:0|max:100',
-            'options' => 'required|array|min:2|max:5',
-            'options.*.label' => 'required|in:A,B,C,D,E',
-            'options.*.text' => 'required|string|max:1000',
+            'point' => 'required|integer|min:0',
+            
+            // Validasi Opsi Jawaban
+            'options' => 'required|array|min:1',
+            'options.*.option_text' => 'nullable|string',
+            'options.*.option_image' => 'nullable|image|max:2048',
             'options.*.is_correct' => 'required|boolean',
+            'options.*.weight' => 'nullable|integer|min:0', // Validasi Bobot
         ];
     }
 

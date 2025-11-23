@@ -2,6 +2,7 @@
 // ============================================
 // app/Http/Controllers/Api/Student/StudentDashboardController.php
 // ============================================
+
 namespace App\Http\Controllers\Api\Student;
 
 use App\Http\Controllers\Controller;
@@ -45,21 +46,42 @@ class StudentDashboardController extends Controller
     {
         $student = $request->user()->student;
 
-        $data = [
-            'materials_progress' => $student->materials()
-                ->withPivot('is_completed', 'progress_percentage')
-                ->get(),
-            'tryout_history' => $student->tryoutResults()
-                ->with('questionPackage')
-                ->orderBy('created_at', 'desc')
-                ->limit(10)
-                ->get(),
-            'last_tryout_score' => $student->last_tryout_score,
+        // 1. Ambil Riwayat Tryout & Format Sesuai Frontend
+        $history = $student->tryoutResults()
+            ->with(['questionPackage.program']) // Eager load relasi
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($result) {
+                return [
+                    'id' => $result->id,
+                    'package_name' => $result->questionPackage->name ?? 'Paket Tidak Ditemukan',
+                    'program_name' => $result->questionPackage->program->name ?? '-',
+                    'date' => $result->created_at->translatedFormat('d F Y H:i'), // Format: 20 Mei 2024 10:00
+                    'score' => $result->total_score,
+                    'is_passed' => (bool) $result->is_passed,
+                ];
+            });
+
+        // 2. Hitung Statistik Summary
+        $totalSeconds = $student->tryoutResults()->sum('duration_seconds');
+        
+        $summary = [
+            // Rata-rata nilai (bulatkan 1 desimal)
+            'average_score' => round($student->tryoutResults()->avg('total_score') ?? 0, 1),
+            
+            // Total Tryout
+            'completed_tryouts' => $student->tryoutResults()->count(),
+            
+            // Konversi detik ke jam (bulatkan 1 desimal)
+            'total_study_hours' => round($totalSeconds / 3600, 1),
         ];
 
         return response()->json([
             'success' => true,
-            'data' => $data
+            'data' => [
+                'summary' => $summary,
+                'history' => $history
+            ]
         ]);
     }
 

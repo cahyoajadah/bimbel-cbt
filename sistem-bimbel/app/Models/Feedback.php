@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Feedback extends Model
 {
+    use HasFactory;
+    protected $table = 'feedbacks';
+    
     protected $fillable = [
         'student_id', 'admin_id', 'month', 'content'
     ];
