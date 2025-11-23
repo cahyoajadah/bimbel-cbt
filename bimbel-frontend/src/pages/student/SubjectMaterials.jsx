@@ -3,7 +3,7 @@
 // ============================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, FileText, CheckCircle, ArrowLeft, ExternalLink } from 'lucide-react';
+import { Video, FileText, CheckCircle, ArrowLeft, ExternalLink, BookOpen } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';

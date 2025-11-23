@@ -49,7 +49,7 @@ class SubjectController extends Controller
         
         // Cari subject, tapi pastikan program_id nya cocok dengan siswa
         $subject = Subject::with(['program', 'materials' => function($query) {
-                $query->where('is_active', true)->orderBy('order');
+                $query->where('is_active', true)->orderBy('order_number');
             }])
             ->where('is_active', true)
             ->whereIn('program_id', $studentProgramIds) // <--- SECURITY CHECK
@@ -58,7 +58,7 @@ class SubjectController extends Controller
         // Add student progress info
         $materials = $subject->materials->map(function($material) use ($student) {
             $pivot = $student->materials()
-                ->where('material_id', $material->id)
+                ->where('materials.id', $material->id)
                 ->first();
 
             return [
@@ -67,7 +67,7 @@ class SubjectController extends Controller
                 'description' => $material->description,
                 'type' => $material->type,
                 'duration_minutes' => $material->duration_minutes,
-                'order' => $material->order,
+                'order' => $material->order_number,
                 'is_completed' => $pivot ? $pivot->pivot->is_completed : false,
                 'progress_percentage' => $pivot ? $pivot->pivot->progress_percentage : 0,
             ];
@@ -98,11 +98,11 @@ class SubjectController extends Controller
 
         $materials = $subject->materials()
             ->where('is_active', true)
-            ->orderBy('order')
+            ->orderBy('order_number') // <--- PASTIKAN ada tanda panah (->) di sini
             ->get()
             ->map(function($material) use ($student) {
                 $pivot = $student->materials()
-                    ->where('material_id', $material->id)
+                    ->where('materials.id', $material->id)
                     ->first();
 
                 $materialData = [
@@ -110,7 +110,7 @@ class SubjectController extends Controller
                     'title' => $material->title,
                     'description' => $material->description,
                     'type' => $material->type,
-                    'order' => $material->order,
+                    'order' => $material->order_number,
                     'duration_minutes' => $material->duration_minutes,
                     'is_completed' => $pivot ? $pivot->pivot->is_completed : false,
                     'progress_percentage' => $pivot ? $pivot->pivot->progress_percentage : 0,
