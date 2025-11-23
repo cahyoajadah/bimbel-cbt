@@ -16,8 +16,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->enum('type', ['video', 'pdf']); // video = YouTube, pdf = upload
             $table->text('content'); // URL YouTube atau path file PDF
-            $table->integer('order')->default(0);
-            $table->integer('duration_minutes')->nullable();
+            $table->integer('order_number')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

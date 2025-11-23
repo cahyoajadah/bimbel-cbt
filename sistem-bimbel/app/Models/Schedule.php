@@ -13,6 +13,8 @@ class Schedule extends Model
     protected $fillable = [
         'title', 'description', 'type', 'class_type',
         'program_id', 'teacher_id', 'package_id',
+        // Hapus 'class_id' jika memang tidak ada di tabel/controller
+        'subject_id', // <--- PASTIKAN INI ADA
         'start_time', 'end_time', 'zoom_link', 'location',
         'max_participants', 'is_active'
     ];
@@ -31,6 +33,13 @@ class Schedule extends Model
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    // [PERBAIKAN UTAMA DI SINI]
+    // Relasi ke Mata Pelajaran (Subject) yang benar
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(Subject::class);
     }
 
     public function package(): BelongsTo

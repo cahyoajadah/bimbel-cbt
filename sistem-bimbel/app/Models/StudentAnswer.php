@@ -10,14 +10,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class StudentAnswer extends Model
 {
     protected $fillable = [
-        'cbt_session_id', 'question_id', 'answer_option_id',
-        'is_correct', 'point_earned', 'answered_at'
+    'cbt_session_id', 'question_id', 'answer_option_id', 
+    'is_correct', 'point_earned', 'answered_at',
+    'answer_text', 'selected_options' // <--- Tambahkan ini
     ];
 
     protected $casts = [
         'is_correct' => 'boolean',
-        'point_earned' => 'decimal:2',
         'answered_at' => 'datetime',
+        'selected_options' => 'array', // <--- Auto convert JSON ke Array
     ];
 
     public function cbtSession(): BelongsTo

@@ -12,10 +12,11 @@ return new class extends Migration
         Schema::create('answer_options', function (Blueprint $table) {
             $table->id();
             $table->foreignId('question_id')->constrained('questions')->onDelete('cascade');
-            $table->char('option_label', 1); // A, B, C, D, E
-            $table->text('option_text');
+            $table->char('option_label', 1)->nullable(); // A, B, C, D, E
+            $table->text('option_text')->nullable();
             $table->string('option_image')->nullable();
             $table->boolean('is_correct')->default(false);
+            $table->integer('weight')->default(0);
             $table->timestamps();
         });
     }

@@ -61,7 +61,10 @@ function AppRoutes() {
   };
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true, // Tambahkan ini juga untuk mencegah warning v7 lainnya
+      }}>
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={isAuthenticated ? handleAuthRedirect() : <Landing />} />

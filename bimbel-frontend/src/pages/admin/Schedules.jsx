@@ -1,65 +1,110 @@
-// src/pages/admin/Schedules.jsx
-import { useState } from 'react';
+// src/pages/admin/Schedules.jsx - KODE FINAL DAN TEROPTIMASI (Loop Fixed)
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Calendar, Clock } from 'lucide-react';
-import { adminService } from '../../api/services/adminService';
+import { Plus, Edit, Trash2, Calendar as CalIcon, Clock, User, MapPin, Link as LinkIcon } from 'lucide-react';
+import api from '../../api/axiosConfig';
 import { Button } from '../../components/common/Button';
 import { Table, Pagination } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { useForm } from 'react-hook-form';
 import { useUIStore } from '../../store/uiStore';
-import { formatDateTime } from '../../utils/helpers';
 import toast from 'react-hot-toast';
-import clsx from 'clsx';
 
 export default function AdminSchedules() {
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
-  const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filteredSubjects, setFilteredSubjects] = useState([]);
 
-  const { data, isLoading } = useQuery({
+  // --- FETCH DATA LISTS (Dropdown Resources) ---
+  const { data: programsData } = useQuery({
+    queryKey: ['admin-programs-list'],
+    queryFn: async () => (await api.get('/admin/programs')).data,
+  });
+  const programsList = programsData?.data?.data || programsData?.data || [];
+  
+  const { data: allSubjectsData } = useQuery({
+    queryKey: ['admin-subjects-all'],
+    queryFn: async () => (await api.get('/admin/subjects')).data,
+  });
+  const allSubjects = allSubjectsData?.data?.data || allSubjectsData?.data || [];
+
+  const { data: allTeachersData } = useQuery({
+    queryKey: ['admin-teachers-all'],
+    queryFn: async () => (await api.get('/admin/teachers')).data,
+  });
+  const allTeachersList = allTeachersData?.data?.data || allTeachersData?.data || [];
+  
+  // --- FETCH SCHEDULES (Paginated Table Data) ---
+  const { data: scheduleData, isLoading } = useQuery({
     queryKey: ['admin-schedules', currentPage],
-    queryFn: () => adminService.getSchedules({ page: currentPage, per_page: 15 }),
+    queryFn: async () => (await api.get(`/admin/schedules?page=${currentPage}&per_page=15`)).data,
   });
 
-  const schedules = data?.data?.data || [];
-  const pagination = data?.data?.meta || data?.data;
+  const schedules = scheduleData?.data?.data || [];
+  const pagination = scheduleData?.data;
 
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
-    defaultValues: {
-      title: '',
-      description: '',
-      type: 'class',
-      class_type: 'zoom',
-      program_id: '',
-      teacher_id: '',
-      start_time: '',
-      end_time: '',
-      zoom_link: '',
-      location: '',
-      max_participants: '',
-      is_active: true,
-    },
+  // --- FORM SETUP ---
+  const { register, handleSubmit, reset, setValue, watch, getValues, formState: { errors } } = useForm({
+    defaultValues: { class_type_select: 'offline', type: 'class', is_active: true }
   });
 
-  const scheduleType = watch('type');
-  const classType = watch('class_type');
+  const classType = watch('class_type_select');
+  const selectedProgramId = watch('program_id');
 
+  // --- LOGIKA FILTER MAPEL (FIXED INFINITE LOOP) ---
+  useEffect(() => {
+    // 1. Dapatkan nilai form saat ini
+    const currentProgramId = getValues('program_id');
+    const currentSubjectId = getValues('subject_id'); 
+    
+    // 2. Filter subjects
+    const filtered = currentProgramId && allSubjects 
+        ? allSubjects.filter(s => s.program_id == currentProgramId)
+        : [];
+    
+    // A. Update state dropdown subjects
+    setFilteredSubjects(filtered); 
+
+    // B. RESET LOGIC (Kunci pemutus loop)
+    if (currentSubjectId) {
+        const isSubjectStillValid = filtered.some(s => s.id == currentSubjectId);
+
+        // Reset hanya jika subject ID saat ini tidak valid DAN nilainya BUKAN string kosong.
+        if (!isSubjectStillValid) { 
+            // Cek apakah nilai saat ini bukan string kosong
+            if (currentSubjectId !== '') { 
+               setValue('subject_id', '', { shouldValidate: true }); 
+            }
+        }
+    }
+    // Dependency Array: Hanya bergantung pada Program ID dan data Mapel global
+  }, [selectedProgramId, allSubjects, getValues, setValue]); 
+
+
+  // --- MUTATIONS ---
   const createMutation = useMutation({
-    mutationFn: adminService.createSchedule,
+    mutationFn: async (payload) => {
+      const res = await api.post('/admin/schedules', payload);
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-schedules']);
       setIsModalOpen(false);
       reset();
       toast.success('Jadwal berhasil dibuat');
     },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal membuat jadwal'),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => adminService.updateSchedule(id, data),
+    mutationFn: async ({ id, payload }) => {
+      const res = await api.put(`/admin/schedules/${id}`, payload);
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-schedules']);
       setIsModalOpen(false);
@@ -70,112 +115,141 @@ export default function AdminSchedules() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: adminService.deleteSchedule,
+    mutationFn: async (id) => {
+      await api.delete(`/admin/schedules/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-schedules']);
-      toast.success('Jadwal berhasil dihapus');
+      toast.success('Jadwal dihapus');
     },
   });
 
+  // --- HANDLERS ---
   const handleOpenModal = (schedule = null) => {
     if (schedule) {
       setEditingSchedule(schedule);
-      reset({
-        title: schedule.title,
-        description: schedule.description || '',
-        type: schedule.type,
-        class_type: schedule.class_type || 'zoom',
-        program_id: schedule.program_id || '',
-        teacher_id: schedule.teacher_id || '',
-        start_time: schedule.start_time,
-        end_time: schedule.end_time,
-        zoom_link: schedule.zoom_link || '',
-        location: schedule.location || '',
-        max_participants: schedule.max_participants || '',
-        is_active: schedule.is_active,
-      });
+      
+      const startDateObj = new Date(schedule.start_time);
+      const endDateObj = new Date(schedule.end_time);
+      
+      setValue('title', schedule.title);
+      setValue('type', schedule.type);
+      setValue('program_id', schedule.program_id || '');
+      
+      // Memberi jeda (timeout) saat set program/subject agar filter berjalan lancar saat edit
+      setTimeout(() => {
+          setValue('subject_id', schedule.subject_id || '');
+          setValue('teacher_id', schedule.teacher_id || '');
+      }, 100);
+
+      setValue('date', startDateObj.toISOString().split('T')[0]);
+      setValue('start_clock', startDateObj.toTimeString().slice(0, 5));
+      setValue('end_clock', endDateObj.toTimeString().slice(0, 5));
+      setValue('class_type_select', schedule.class_type || 'offline');
+      
+      if (schedule.class_type === 'zoom') setValue('zoom_link', schedule.zoom_link);
+      else setValue('location', schedule.location);
+      
+      setValue('description', schedule.description);
+      setValue('is_active', schedule.is_active);
+      setValue('max_participants', schedule.max_participants);
     } else {
       setEditingSchedule(null);
-      reset();
+      reset({ class_type_select: 'offline', type: 'class', is_active: true });
+      setFilteredSubjects([]);
     }
     setIsModalOpen(true);
-  };
-
-  const onSubmit = (data) => {
-    if (editingSchedule) {
-      updateMutation.mutate({ id: editingSchedule.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
   };
 
   const handleDelete = (schedule) => {
     showConfirm({
       title: 'Hapus Jadwal',
-      message: `Apakah Anda yakin ingin menghapus jadwal "${schedule.title}"?`,
+      message: 'Hapus jadwal ini?',
       type: 'danger',
-      confirmText: 'Hapus',
       onConfirm: () => deleteMutation.mutate(schedule.id),
     });
   };
 
+  const onSubmit = (data) => {
+    const startDateTime = `${data.date} ${data.start_clock}:00`;
+    const endDateTime = `${data.date} ${data.end_clock}:00`;
+
+    const payload = {
+        title: data.title,
+        type: data.type,
+        class_type: data.class_type_select,
+        program_id: data.program_id,
+        subject_id: data.subject_id,
+        teacher_id: data.teacher_id,
+        package_id: data.package_id,
+        start_time: startDateTime,
+        end_time: endDateTime,
+        description: data.description,
+        is_active: data.is_active,
+        max_participants: data.max_participants,
+    };
+
+    if (data.class_type_select === 'zoom') {
+        payload.zoom_link = data.zoom_link;
+        payload.location = 'Online (Zoom)';
+    } else {
+        payload.location = data.location;
+        payload.zoom_link = null;
+    }
+
+    if (editingSchedule) {
+      updateMutation.mutate({ id: editingSchedule.id, payload });
+    } else {
+      createMutation.mutate(payload);
+    }
+  };
+
+  // --- COLUMNS (Sama seperti sebelumnya) ---
   const columns = [
-    {
-      header: 'Judul',
-      accessor: 'title',
+    { 
+        header: 'Waktu', 
+        render: (row) => (
+            <div>
+                <div className="text-sm font-bold text-gray-900">{new Date(row.start_time).toLocaleDateString('id-ID')}</div>
+                <div className="text-xs text-gray-500">{new Date(row.start_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(row.end_time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+            </div>
+        )
     },
-    {
-      header: 'Tipe',
-      render: (row) => (
-        <span className={clsx(
-          'px-2 py-1 text-xs font-medium rounded-full',
-          row.type === 'tryout' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-        )}>
-          {row.type === 'tryout' ? 'Tryout' : 'Kelas'}
-        </span>
-      ),
+    { 
+        header: 'Kelas', 
+        render: (row) => (
+            <div>
+                <div className="text-sm font-bold text-blue-700">{row.title}</div>
+                <div className="text-xs text-gray-600">{row.subject?.name} ({row.program?.name})</div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${row.type === 'tryout' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {row.type === 'tryout' ? 'Tryout' : 'Kelas'}
+                </span>
+            </div>
+        )
     },
-    {
-      header: 'Waktu Mulai',
-      render: (row) => formatDateTime(row.start_time),
+    { 
+        header: 'Pengajar', 
+        render: (row) => (
+            <div className="flex items-center gap-2">
+                <User size={14} className="text-gray-400" />
+                <span className="text-sm">{row.teacher?.user?.name || '-'}</span>
+            </div>
+        )
     },
-    {
-      header: 'Waktu Selesai',
-      render: (row) => formatDateTime(row.end_time),
-    },
-    {
-      header: 'Tipe Kelas',
-      render: (row) => row.class_type ? (
-        <span className="text-sm capitalize">{row.class_type}</span>
-      ) : '-',
-    },
-    {
-      header: 'Status',
-      render: (row) => (
-        <span className={clsx(
-          'px-2 py-1 text-xs font-medium rounded-full',
-          row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-        )}>
-          {row.is_active ? 'Aktif' : 'Tidak Aktif'}
-        </span>
-      ),
+    { 
+        header: 'Lokasi', 
+        render: (row) => (
+            <span className={`px-2 py-1 rounded text-xs font-medium border ${row.class_type === 'zoom' ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700'}`}>
+                {row.class_type === 'zoom' ? 'Online' : row.location}
+            </span>
+        )
     },
     {
       header: 'Aksi',
       render: (row) => (
-        <div className="flex items-center space-x-2">
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Trash2}
-            onClick={() => handleDelete(row)}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            Hapus
-          </Button>
+        <div className="flex space-x-2">
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
         </div>
       ),
     },
@@ -184,20 +258,15 @@ export default function AdminSchedules() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Jadwal</h1>
-          <p className="mt-1 text-sm text-gray-600">Kelola jadwal kelas dan tryout</p>
-        </div>
-        <Button icon={Plus} onClick={() => handleOpenModal()}>
-          Tambah Jadwal
-        </Button>
+        <h1 className="text-2xl font-bold text-gray-800">Jadwal Kelas</h1>
+        <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Jadwal</Button>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow overflow-hidden">
         <Table columns={columns} data={schedules} loading={isLoading} />
         {pagination && (
           <Pagination
-            currentPage={pagination.current_page || currentPage}
+            currentPage={pagination.current_page || 1}
             totalPages={pagination.last_page || 1}
             onPageChange={setCurrentPage}
             perPage={pagination.per_page || 15}
@@ -208,134 +277,107 @@ export default function AdminSchedules() {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingSchedule(null);
-          reset();
-        }}
+        onClose={() => setIsModalOpen(false)}
         title={editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Input
-            label="Judul"
-            required
-            error={errors.title?.message}
-            {...register('title', { required: 'Judul wajib diisi' })}
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
-            <textarea
-              rows={2}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2"
-              {...register('description')}
-            />
-          </div>
+          
+          <Input label="Judul Kegiatan" placeholder="Contoh: Pembahasan Soal" {...register('title', { required: 'Judul wajib diisi' })} error={errors.title} />
 
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tipe <span className="text-red-500">*</span>
-              </label>
-              <select
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2"
-                {...register('type', { required: true })}
-              >
-                <option value="class">Kelas</option>
-                <option value="tryout">Tryout</option>
-              </select>
+            {/* Tipe Jadwal */}
+             <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Jenis</label>
+                <select className="w-full border-gray-300 rounded-lg shadow-sm p-2 border" {...register('type', { required: true })}>
+                    <option value="class">Kelas Biasa</option>
+                    <option value="tryout">Tryout</option>
+                </select>
             </div>
 
-            {scheduleType === 'class' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipe Kelas <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2"
-                  {...register('class_type')}
-                >
-                  <option value="zoom">Zoom</option>
-                  <option value="offline">Offline</option>
+            {/* Dropdown Program */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Program</label>
+                <select className="w-full border-gray-300 rounded-lg shadow-sm p-2 border" {...register('program_id', { required: 'Program wajib diisi' })}>
+                    <option value="">-- Pilih Program --</option>
+                    {programsList?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
-              </div>
-            )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Waktu Mulai"
-              type="datetime-local"
-              required
-              {...register('start_time', { required: 'Waktu mulai wajib diisi' })}
-            />
-            <Input
-              label="Waktu Selesai"
-              type="datetime-local"
-              required
-              {...register('end_time', { required: 'Waktu selesai wajib diisi' })}
-            />
+            {/* DROPDOWN MAPEL (FILTERED) */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mata Pelajaran</label>
+                <select 
+                    className="w-full border-gray-300 rounded-lg shadow-sm p-2 border disabled:bg-gray-100" 
+                    {...register('subject_id', { required: 'Mapel wajib diisi' })}
+                    disabled={!selectedProgramId || filteredSubjects.length === 0}
+                >
+                    <option value="">
+                        {!selectedProgramId ? '-- Pilih Program Dulu --' : 
+                         filteredSubjects.length === 0 ? '-- Tidak ada Mapel --' : '-- Pilih Mapel --'}
+                    </option>
+                    {filteredSubjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                </select>
+            </div>
+            
+            {/* DROPDOWN PENGAJAR */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pengajar</label>
+                <select className="w-full border-gray-300 rounded-lg shadow-sm p-2 border" {...register('teacher_id', { required: 'Pengajar wajib diisi' })}>
+                    <option value="">-- Pilih Pengajar --</option>
+                    {allTeachersList?.map(t => <option key={t.id} value={t.id}>{t.user?.name || t.id}</option>)}
+                </select>
+            </div>
           </div>
 
-          {scheduleType === 'class' && classType === 'zoom' && (
-            <Input
-              label="Link Zoom"
-              type="url"
-              placeholder="https://zoom.us/j/..."
-              {...register('zoom_link')}
-            />
-          )}
-
-          {scheduleType === 'class' && classType === 'offline' && (
-            <Input
-              label="Lokasi"
-              placeholder="Ruang 101, Gedung A"
-              {...register('location')}
-            />
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Program ID" type="number" {...register('program_id')} />
-            <Input label="Teacher ID" type="number" {...register('teacher_id')} />
+          {/* RADIO MODE KELAS */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Mode Kelas</label>
+            <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg w-full hover:bg-gray-50">
+                    <input type="radio" value="offline" {...register('class_type_select')} className="text-blue-600" />
+                    <div className="flex items-center gap-2 text-sm font-medium"><MapPin size={16}/> Offline</div>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg w-full hover:bg-gray-50">
+                    <input type="radio" value="zoom" {...register('class_type_select')} className="text-blue-600" />
+                    <div className="flex items-center gap-2 text-sm font-medium"><LinkIcon size={16}/> Online</div>
+                </label>
+            </div>
           </div>
 
-          <Input
-            label="Max Peserta"
-            type="number"
-            placeholder="Kosongkan untuk unlimited"
-            {...register('max_participants')}
-          />
+          {classType === 'zoom' ? (
+             <Input label="Link Meeting" placeholder="https://zoom.us/..." {...register('zoom_link', { required: true })} error={errors.zoom_link} />
+          ) : (
+             <Input label="Lokasi Ruangan" placeholder="Ruang 101" {...register('location', { required: true })} error={errors.location} />
+          )}
+
+          <div className="grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+             <div className="col-span-3 sm:col-span-1">
+                <Input type="date" label="Tanggal" {...register('date', { required: true })} className="bg-white" />
+             </div>
+             <div className="col-span-3 sm:col-span-1">
+                <Input type="time" label="Jam Mulai" {...register('start_clock', { required: true })} className="bg-white" />
+             </div>
+             <div className="col-span-3 sm:col-span-1">
+                <Input type="time" label="Jam Selesai" {...register('end_clock', { required: true })} className="bg-white" />
+             </div>
+          </div>
+
+          <Input label="Max Peserta" type="number" placeholder="Kosongkan untuk unlimited" {...register('max_participants')} />
 
           <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="is_active"
-              className="rounded border-gray-300"
-              {...register('is_active')}
-            />
-            <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
-              Jadwal Aktif
-            </label>
+            <input type="checkbox" id="is_active" {...register('is_active')} className="rounded text-blue-600" />
+            <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">Jadwal Aktif</label>
           </div>
 
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setIsModalOpen(false);
-                setEditingSchedule(null);
-                reset();
-              }}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              loading={createMutation.isPending || updateMutation.isPending}
-            >
-              {editingSchedule ? 'Perbarui' : 'Simpan'}
+          <div className="flex justify-end space-x-3 pt-4 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
+              {editingSchedule ? 'Simpan' : 'Buat Jadwal'}
             </Button>
           </div>
         </form>

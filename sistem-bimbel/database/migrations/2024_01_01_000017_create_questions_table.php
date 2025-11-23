@@ -12,13 +12,16 @@ return new class extends Migration
         Schema::create('questions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('question_package_id')->constrained('question_packages')->onDelete('cascade');
-            $table->integer('order_number'); // urutan soal, TIDAK DIACAK
+            
+            // [TAMBAHKAN INI]
+            $table->enum('type', ['single', 'multiple', 'weighted', 'short'])->default('single');
+            
             $table->text('question_text');
             $table->string('question_image')->nullable();
-            $table->integer('duration_seconds')->default(120); // 2 menit
-            $table->decimal('point', 8, 2)->default(5);
-            $table->text('explanation')->nullable(); // pembahasan
-            $table->string('explanation_image')->nullable();
+            $table->integer('point')->default(5); // Default point
+            $table->text('explanation')->nullable(); // Pembahasan (Opsional)
+            
+            $table->integer('order_number')->default(0);
             $table->timestamps();
         });
     }

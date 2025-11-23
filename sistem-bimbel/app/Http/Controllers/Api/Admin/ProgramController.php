@@ -11,10 +11,10 @@ class ProgramController extends Controller
     /**
      * Menampilkan daftar program untuk dropdown
      */
-    public function index()
+    public function index(Request $request)
     {
-        // Ambil semua program, urutkan berdasarkan nama
-        $programs = Program::orderBy('name', 'asc')->get();
+        // Gunakan get() agar dropdown di frontend menerima Array lengkap
+        $programs = \App\Models\Program::orderBy('name', 'asc')->get();
 
         return response()->json([
             'success' => true,

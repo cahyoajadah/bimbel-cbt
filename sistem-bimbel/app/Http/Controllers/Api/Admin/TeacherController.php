@@ -17,8 +17,24 @@ class TeacherController extends Controller
 {
     public function index(Request $request)
     {
-        $teachers = Teacher::with('user')
-            ->paginate($request->get('per_page', 15));
+        // PENTING: Gunakan with('user')
+        $query = Teacher::with('user'); 
+
+        if ($request->has('search')) {
+            $query->whereHas('user', function($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->search . '%')
+                  ->orWhere('email', 'like', '%' . $request->search . '%');
+            });
+        }
+        
+        // [PERBAIKAN] Urutkan berdasarkan nama user (Kolom yang ada)
+        // Kita tidak bisa orderBy('name') langsung, harus join atau order by relationship
+        // Karena ini paginated, kita akan tetap pakai paginate di akhir
+        
+        $teachers = $query->join('users', 'teachers.user_id', '=', 'users.id')
+                          ->select('teachers.*') // Pilih semua kolom teachers
+                          ->orderBy('users.name', 'asc') // Urutkan berdasarkan nama user
+                          ->paginate($request->get('per_page', 15));
 
         return response()->json([
             'success' => true,

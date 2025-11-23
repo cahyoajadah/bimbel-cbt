@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Book } from 'lucide-react';
-import { adminService } from '../../api/services/adminService'; // Pastikan import ini benar (bukan axiosInstance)
+import { Plus, Edit, Trash2, BookOpen, Search } from 'lucide-react';
+import api from '../../api/axiosConfig';
 import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
@@ -11,134 +11,159 @@ import { useUIStore } from '../../store/uiStore';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
-export default function AdminSubjects() {
+export default function Subjects() {
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // 1. Fetch Data Subjects
-  const { data: subjectData, isLoading } = useQuery({
-    queryKey: ['admin-subjects'],
-    queryFn: () => adminService.getSubjects({ page: 1, per_page: 100 }), // Ambil semua dulu
+  // --- 1. FETCH DATA SUBJECTS ---
+  const { data: subjects, isLoading } = useQuery({
+    queryKey: ['admin-subjects', searchTerm],
+    queryFn: async () => {
+      const params = searchTerm ? { search: searchTerm } : {};
+      const res = await api.get('/admin/subjects', { params });
+      return res.data.data;
+    },
   });
 
-  // 2. Fetch Data Programs (Untuk Dropdown)
-  const { data: programsData } = useQuery({
-    queryKey: ['admin-programs-list'],
-    queryFn: () => adminService.getPrograms(), // Pastikan fungsi ini ada di adminService
+  // --- 2. FETCH DATA PROGRAMS (UNTUK DROPDOWN) ---
+  const { data: programs } = useQuery({
+    queryKey: ['admin-programs'],
+    queryFn: async () => {
+      // Pastikan ProgramController menggunakan get(), bukan paginate()
+      const res = await api.get('/admin/programs');
+      return res.data.data;
+    },
   });
 
-  const subjects = subjectData?.data?.data || [];
-  const programs = programsData?.data || []; // Sesuaikan struktur response program
-
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
-
-  // Pantau nilai is_active untuk UI Checkbox
-  const isActive = watch('is_active');
+  // --- FORM SETUP ---
+  const { register, handleSubmit, reset, setValue, setError, formState: { errors } } = useForm();
 
   const createMutation = useMutation({
-    mutationFn: adminService.createSubject,
+    mutationFn: async (data) => {
+      const res = await api.post('/admin/subjects', data);
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-subjects']);
-      handleCloseModal();
+      setIsModalOpen(false);
+      reset();
       toast.success('Mata Pelajaran berhasil dibuat');
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal menyimpan'),
+    onError: (err) => {
+        // Handle Validasi Error dari Backend (Misal: Kode Kembar)
+        const validationErrors = err.response?.data?.errors;
+        if (validationErrors) {
+            Object.keys(validationErrors).forEach((key) => {
+                setError(key, { type: 'server', message: validationErrors[key][0] });
+            });
+        } else {
+            toast.error(err.response?.data?.message || 'Gagal menyimpan');
+        }
+    }
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => adminService.updateSubject(id, data),
+    mutationFn: async ({ id, data }) => {
+      const res = await api.put(`/admin/subjects/${id}`, data);
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-subjects']);
-      handleCloseModal();
+      setIsModalOpen(false);
+      setEditingSubject(null);
+      reset();
       toast.success('Mata Pelajaran berhasil diperbarui');
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal update'),
+    onError: (err) => {
+        const validationErrors = err.response?.data?.errors;
+        if (validationErrors) {
+            Object.keys(validationErrors).forEach((key) => {
+                setError(key, { type: 'server', message: validationErrors[key][0] });
+            });
+        } else {
+            toast.error(err.response?.data?.message || 'Gagal menyimpan');
+        }
+    }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: adminService.deleteSubject,
+    mutationFn: async (id) => {
+      await api.delete(`/admin/subjects/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-subjects']);
-      toast.success('Mata Pelajaran berhasil dihapus');
+      toast.success('Mata Pelajaran dihapus');
     },
   });
 
   const handleOpenModal = (subject = null) => {
     if (subject) {
       setEditingSubject(subject);
-      // Set value form. Untuk boolean, pastikan true/false
+      setValue('program_id', subject.program_id);
       setValue('name', subject.name);
-      setValue('program_id', subject.program_id); // Set ID program yang terpilih
       setValue('code', subject.code);
       setValue('description', subject.description);
-      setValue('is_active', subject.is_active ? true : false); // Force boolean
+      setValue('is_active', subject.is_active);
     } else {
       setEditingSubject(null);
-      reset({ 
-        name: '', 
-        program_id: '', 
-        code: '', 
-        description: '', 
-        is_active: true // Default aktif
-      });
+      reset({ is_active: true }); // Default aktif
     }
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingSubject(null);
-    reset();
+  const handleDelete = (subject) => {
+    showConfirm({
+      title: 'Hapus Mata Pelajaran',
+      message: `Yakin ingin menghapus ${subject.name}?`,
+      confirmText: 'Hapus',
+      type: 'danger',
+      onConfirm: () => deleteMutation.mutate(subject.id),
+    });
   };
 
   const onSubmit = (data) => {
-    const payload = {
-        ...data,
-        // Pastikan is_active dikirim sebagai 1 atau 0 agar Laravel mengerti
-        is_active: data.is_active ? 1 : 0,
-    };
-
     if (editingSubject) {
-      updateMutation.mutate({ id: editingSubject.id, data: payload });
+      updateMutation.mutate({ id: editingSubject.id, data });
     } else {
-      createMutation.mutate(payload);
+      createMutation.mutate(data);
     }
   };
 
   const columns = [
     { 
-      header: 'Program', 
-      // Tampilkan Nama Program, bukan ID
-      render: (row) => <span className="font-medium text-blue-600">{row.program?.name || '-'}</span>
+        header: 'Kode', 
+        accessor: 'code',
+        className: 'font-mono text-xs font-bold text-gray-600' 
     },
-    { header: 'Mata Pelajaran', accessor: 'name' },
-    { header: 'Kode', accessor: 'code' },
     { 
-      header: 'Status', 
-      render: (row) => (
-        <span className={clsx('px-2 py-1 text-xs rounded-full', row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800')}>
-          {row.is_active ? 'Aktif' : 'Tidak Aktif'}
-        </span>
-      )
+        header: 'Program', 
+        render: (row) => (
+            <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full">
+                {row.program?.name || '-'}
+            </span>
+        )
+    },
+    { header: 'Nama Mapel', accessor: 'name', className: 'font-medium text-gray-900' },
+    { 
+        header: 'Status', 
+        render: (row) => (
+            <span className={clsx(
+                'px-2 py-1 text-xs font-medium rounded-full',
+                row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+            )}>
+                {row.is_active ? 'Aktif' : 'Nonaktif'}
+            </span>
+        )
     },
     {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>Edit</Button>
-          <Button size="sm" variant="ghost" icon={Trash2} 
-            onClick={() => showConfirm({
-              title: 'Hapus Mapel',
-              message: 'Yakin hapus?',
-              type: 'danger',
-              confirmText: 'Hapus',
-              onConfirm: () => deleteMutation.mutate(row.id)
-            })} 
-            className="text-red-600 hover:bg-red-50">
-            Hapus
-          </Button>
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
         </div>
       ),
     },
@@ -147,67 +172,93 @@ export default function AdminSubjects() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mata Pelajaran</h1>
-          <p className="text-sm text-gray-600">Kelola daftar mata pelajaran per program</p>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-800">Mata Pelajaran</h1>
         <Button icon={Plus} onClick={() => handleOpenModal()}>Tambah Mapel</Button>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
-        <Table columns={columns} data={subjects} loading={isLoading} />
+      {/* Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+        <input
+            type="text"
+            placeholder="Cari mata pelajaran..."
+            className="pl-10 pr-4 py-2 w-full border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <Table columns={columns} data={subjects || []} loading={isLoading} />
       </div>
 
       <Modal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => setIsModalOpen(false)}
         title={editingSubject ? 'Edit Mata Pelajaran' : 'Tambah Mata Pelajaran'}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           
-          {/* Dropdown Program */}
+          {/* DROPDOWN PROGRAM */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                Program Studi <span className="text-red-500">*</span>
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Program Bimbel</label>
             <select
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                 {...register('program_id', { required: 'Program wajib dipilih' })}
             >
                 <option value="">-- Pilih Program --</option>
-                {programs.map((prog) => (
-                    <option key={prog.id} value={prog.id}>
-                        {prog.name} {prog.level ? `(${prog.level})` : ''}
-                    </option>
+                {programs?.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
             </select>
-            {errors.program_id && <p className="text-red-500 text-xs mt-1">{errors.program_id.message}</p>}
+            {errors.program_id && <span className="text-red-500 text-xs">{errors.program_id.message}</span>}
           </div>
 
-          <Input label="Nama Mapel" required {...register('name', { required: 'Wajib diisi' })} error={errors.name?.message} />
-          <Input label="Kode Mapel" {...register('code')} />
-          
+          <div className="grid grid-cols-3 gap-4">
+             <div className="col-span-1">
+                <Input 
+                    label="Kode Mapel" 
+                    placeholder="MAT-10" 
+                    {...register('code', { required: 'Kode wajib diisi' })} 
+                    error={errors.code?.message} // Tampilkan pesan error unik disini
+                />
+             </div>
+             <div className="col-span-2">
+                <Input 
+                    label="Nama Mata Pelajaran" 
+                    placeholder="Matematika Dasar" 
+                    {...register('name', { required: 'Nama wajib diisi' })} 
+                    error={errors.name?.message}
+                />
+             </div>
+          </div>
+
           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
-             <textarea className="block w-full rounded-lg border border-gray-300 px-3 py-2" {...register('description')} rows={3} />
+            <label className="block text-sm font-medium text-gray-700">Deskripsi</label>
+            <textarea 
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
+                rows="3"
+                {...register('description')}
+            ></textarea>
           </div>
 
-          {/* Toggle Is Active */}
-          <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg">
-            <input 
-                type="checkbox" 
-                id="is_active" 
-                className="w-5 h-5 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                {...register('is_active')} 
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="is_active"
+              className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+              {...register('is_active')}
             />
-            <label htmlFor="is_active" className="text-sm font-medium text-gray-700 cursor-pointer">
-              Status Aktif (Siswa dapat melihat mapel ini)
+            <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
+              Aktif
             </label>
           </div>
 
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
-            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
+          <div className="flex justify-end space-x-3 pt-4 border-t mt-4">
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
+              {editingSubject ? 'Simpan' : 'Buat Mapel'}
+            </Button>
           </div>
         </form>
       </Modal>

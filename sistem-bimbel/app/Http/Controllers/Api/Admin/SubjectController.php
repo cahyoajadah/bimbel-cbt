@@ -18,7 +18,9 @@ class SubjectController extends Controller
             $query->where('name', 'like', '%' . $request->search . '%');
         }
 
-        $subjects = $query->orderBy('name')->paginate($request->get('per_page', 15));
+        // [PERBAIKAN]: Gunakan get() bukan paginate()
+        // Agar frontend menerima Array murni untuk dropdown, bukan objek pagination
+        $subjects = $query->orderBy('name')->get();
 
         return response()->json([
             'success' => true,
@@ -29,14 +31,16 @@ class SubjectController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'program_id' => 'required|exists:programs,id', // <--- Validasi baru
+            'program_id' => 'required|exists:programs,id',
             'name' => 'required|string|max:255',
-            'code' => 'nullable|string|max:50',
+            // Tambahkan validasi unique
+            'code' => 'required|string|max:50|unique:subjects,code', 
             'description' => 'nullable|string',
             'is_active' => 'boolean'
         ]);
 
         if ($validator->fails()) {
+            // Return 422 (Unprocessable Entity) agar frontend bisa menangkap error validasi
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
@@ -54,14 +58,14 @@ class SubjectController extends Controller
         $subject = Subject::findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'program_id' => 'required|exists:programs,id', // <--- Validasi baru
+            'program_id' => 'required|exists:programs,id',
             'name' => 'required|string|max:255',
-            'code' => 'nullable|string|max:50',
+            // Validasi unique TAPI abaikan ID saat ini (agar tidak error saat edit diri sendiri)
+            'code' => 'required|string|max:50|unique:subjects,code,' . $id, 
             'description' => 'nullable|string',
             'is_active' => 'boolean'
         ]);
 
-        // ... (sisanya sama, update $subject)
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }

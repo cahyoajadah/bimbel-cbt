@@ -10,13 +10,13 @@ export const useCBTStore = create((set, get) => ({
   packageData: null,
   questions: [],
   currentQuestionIndex: 0,
-  answers: {},
+  answers: {}, // Stores: { qId: optionId } OR { qId: [id1, id2] } OR { qId: "text" }
   
   // Timer
   timeRemaining: 0,
   timerInterval: null,
   
-  // Fullscreen
+  // Fullscreen & Security
   isFullscreen: true,
   warningCount: 0,
   
@@ -31,13 +31,12 @@ export const useCBTStore = create((set, get) => ({
       sessionId: sessionData.session_id,
       packageData: sessionData.package,
       questions: questions,
-      timeRemaining: sessionData.duration_minutes * 60, // Convert to seconds
-      answers: {},
+      timeRemaining: sessionData.duration_minutes * 60,
+      answers: {}, // Load previous answers here if backend supports resume
       currentQuestionIndex: 0,
       warningCount: 0,
     });
     
-    // Save session token to sessionStorage
     sessionStorage.setItem('cbt_session_token', sessionData.session_token);
   },
   
@@ -45,16 +44,19 @@ export const useCBTStore = create((set, get) => ({
     set({ currentQuestionIndex: index });
   },
   
-  saveAnswer: (questionId, optionId) => {
+  // Updated to handle various data types (string, array, int)
+  saveAnswer: (questionId, answerValue) => {
     set((state) => ({
       answers: {
         ...state.answers,
-        [questionId]: optionId,
+        [questionId]: answerValue,
       },
     }));
   },
   
   startTimer: (callback) => {
+    if (get().timerInterval) return; // Prevent duplicate timers
+
     const interval = setInterval(() => {
       const newTime = get().timeRemaining - 1;
       
@@ -117,15 +119,22 @@ export const useCBTStore = create((set, get) => ({
     });
   },
   
-  // Computed values
+  // Enhanced Progress Calculation
   getProgress: () => {
     const { questions, answers } = get();
     const totalQuestions = questions.length;
-    const answeredQuestions = Object.keys(answers).length;
+    
+    // Hitung jawaban valid saja
+    const answeredCount = Object.values(answers).filter(val => {
+        if (Array.isArray(val)) return val.length > 0; // Array kosong = belum jawab
+        if (typeof val === 'string') return val.trim().length > 0; // Teks kosong = belum jawab
+        return val !== null && val !== undefined; // Null = belum jawab
+    }).length;
+
     return {
       total: totalQuestions,
-      answered: answeredQuestions,
-      percentage: totalQuestions > 0 ? (answeredQuestions / totalQuestions) * 100 : 0,
+      answered: answeredCount,
+      percentage: totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0,
     };
   },
 }));

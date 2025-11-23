@@ -1,31 +1,34 @@
 <?php
-// ============================================
-// app/Models/Material.php
-// ============================================
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Material extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
-        'subject_id', 'title', 'description', 'type',
-        'content', 'order', 'duration_minutes', 'is_active'
+        'subject_id',
+        'title',
+        'type',       // video, pdf, text
+        'content',    // url atau file path
+        'description',
+        'order_number', // [PENTING] Gunakan order_number
+        'is_active',
+        // duration_minutes SUDAH DIHAPUS
     ];
 
-    protected $casts = ['is_active' => 'boolean'];
-
-    public function subject(): BelongsTo
+    public function subject()
     {
         return $this->belongsTo(Subject::class);
     }
 
-    public function students(): BelongsToMany
+    public function students()
     {
         return $this->belongsToMany(Student::class, 'student_materials')
-            ->withPivot('is_completed', 'completed_at', 'progress_percentage')
+            ->withPivot('is_completed', 'progress_percentage')
             ->withTimestamps();
     }
 }

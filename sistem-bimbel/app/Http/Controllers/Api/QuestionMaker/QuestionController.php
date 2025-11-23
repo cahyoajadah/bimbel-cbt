@@ -5,6 +5,7 @@
 namespace App\Http\Controllers\Api\QuestionMaker;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreQuestionRequest;
 use App\Models\Question;
 use App\Models\QuestionPackage;
 use App\Models\AnswerOption;
@@ -38,59 +39,48 @@ class QuestionController extends Controller
     {
         DB::beginTransaction();
         try {
-            // 1. Upload Gambar Soal (Jika Ada)
             $imagePath = null;
             if ($request->hasFile('question_image')) {
                 $imagePath = $request->file('question_image')->store('questions', 'public');
             }
 
-            // 2. Buat Soal
             $question = Question::create([
                 'question_package_id' => $packageId,
-                'type' => $request->type, // Simpan tipe soal
+                'type' => $request->type,
                 'question_text' => $request->question_text,
                 'question_image' => $imagePath,
                 'point' => $request->point,
+                'explanation' => $request->explanation, // <--- [PERBAIKAN] Tambahkan ini
                 'order_number' => Question::where('question_package_id', $packageId)->max('order_number') + 1,
             ]);
 
-            // 3. Buat Opsi Jawaban
+            // ... (Sisa kode simpan options biarkan sama) ...
             if ($request->has('options')) {
                 foreach ($request->options as $index => $optionData) {
-                    
-                    // Handle gambar per opsi (karena array, aksesnya agak tricky)
+                    // ... (Logika simpan opsi sama seperti sebelumnya) ...
                     $optionImagePath = null;
                     if (isset($optionData['option_image']) && $optionData['option_image'] instanceof \Illuminate\Http\UploadedFile) {
                         $optionImagePath = $optionData['option_image']->store('options', 'public');
                     }
 
-                    // Tentukan Label (A, B, C...) atau Kosong jika Isian Singkat
-                    $label = $request->type === 'short' ? null : chr(65 + $index); // 65 = A
+                    $label = $request->type === 'short' ? null : chr(65 + $index);
 
                     $question->answerOptions()->create([
                         'option_label' => $label,
-                        'option_text' => $optionData['option_text'] ?? '', // Bisa kosong jika cuma gambar
+                        'option_text' => $optionData['option_text'] ?? '',
                         'option_image' => $optionImagePath,
                         'is_correct' => filter_var($optionData['is_correct'], FILTER_VALIDATE_BOOLEAN),
-                        'weight' => $optionData['weight'] ?? 0, // Simpan bobot (default 0)
+                        'weight' => $optionData['weight'] ?? 0,
                     ]);
                 }
             }
 
             DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Soal berhasil dibuat',
-                'data' => $question->load('answerOptions')
-            ], 201);
+            return response()->json(['success' => true, 'message' => 'Soal berhasil dibuat'], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal membuat soal: ' . $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
@@ -106,80 +96,58 @@ class QuestionController extends Controller
         ]);
     }
 
-    public function update(Request $request, $packageId, $id)
+    public function update(StoreQuestionRequest $request, $packageId, $id)
     {
         $question = Question::where('question_package_id', $packageId)->findOrFail($id);
 
-        $validator = Validator::make($request->all(), [
-            'question_text' => 'sometimes|string',
-            'question_image' => 'nullable|image|max:2048',
-            'duration_seconds' => 'sometimes|integer|min:1',
-            'point' => 'sometimes|numeric|min:0',
-            'explanation' => 'nullable|string',
-            'explanation_image' => 'nullable|image|max:2048',
-            'options' => 'sometimes|array|min:2|max:5',
-            'options.*.id' => 'sometimes|exists:answer_options,id',
-            'options.*.label' => 'required|in:A,B,C,D,E',
-            'options.*.text' => 'required|string',
-            'options.*.is_correct' => 'required|boolean',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         DB::beginTransaction();
         try {
-            $updateData = $request->only([
-                'question_text', 'duration_seconds', 'point', 'explanation'
-            ]);
+            $dataToUpdate = [
+                'type' => $request->type,
+                'question_text' => $request->question_text,
+                'point' => $request->point,
+                'explanation' => $request->explanation, // <--- [PERBAIKAN] Tambahkan ini
+            ];
 
             if ($request->hasFile('question_image')) {
-                $updateData['question_image'] = $request->file('question_image')
-                    ->store('questions/images', 'public');
+                // Hapus gambar lama jika perlu (opsional)
+                $dataToUpdate['question_image'] = $request->file('question_image')->store('questions', 'public');
             }
 
-            if ($request->hasFile('explanation_image')) {
-                $updateData['explanation_image'] = $request->file('explanation_image')
-                    ->store('questions/explanations', 'public');
-            }
+            $question->update($dataToUpdate);
 
-            $question->update($updateData);
+            // Hapus opsi lama & buat baru (Simplest approach)
+            $question->answerOptions()->delete();
 
-            // Update options if provided
             if ($request->has('options')) {
-                foreach ($request->options as $optionData) {
-                    if (isset($optionData['id'])) {
-                        $option = AnswerOption::find($optionData['id']);
-                        if ($option && $option->question_id == $question->id) {
-                            $option->update([
-                                'option_label' => $optionData['label'],
-                                'option_text' => $optionData['text'],
-                                'is_correct' => $optionData['is_correct'],
-                            ]);
-                        }
+                foreach ($request->options as $index => $optionData) {
+                    // ... (Logika simpan opsi sama seperti di store) ...
+                    $optionImagePath = null;
+                    if (isset($optionData['option_image']) && $optionData['option_image'] instanceof \Illuminate\Http\UploadedFile) {
+                        $optionImagePath = $optionData['option_image']->store('options', 'public');
+                    } elseif (isset($optionData['image_url'])) {
+                        // Keep old image if sent back as URL (optional logic)
+                        $optionImagePath = str_replace(url('storage').'/', '', $optionData['image_url']);
                     }
+
+                    $label = $request->type === 'short' ? null : chr(65 + $index);
+
+                    $question->answerOptions()->create([
+                        'option_label' => $label,
+                        'option_text' => $optionData['option_text'] ?? '',
+                        'option_image' => $optionImagePath,
+                        'is_correct' => filter_var($optionData['is_correct'], FILTER_VALIDATE_BOOLEAN),
+                        'weight' => $optionData['weight'] ?? 0,
+                    ]);
                 }
             }
 
             DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Soal berhasil diperbarui',
-                'data' => $question->fresh()->load('answerOptions')
-            ]);
+            return response()->json(['success' => true, 'message' => 'Soal berhasil diperbarui']);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal memperbarui soal: ' . $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 

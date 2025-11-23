@@ -1,7 +1,5 @@
 <?php
-// ============================================
-// app/Http/Controllers/Api/Admin/ScheduleController.php
-// ============================================
+
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
@@ -13,7 +11,8 @@ class ScheduleController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Schedule::with(['program', 'teacher', 'package']);
+        // [UPDATE] Tambahkan 'subject' ke dalam with()
+        $query = Schedule::with(['program', 'subject', 'teacher.user', 'package']);
 
         if ($request->has('type')) {
             $query->where('type', $request->type);
@@ -22,7 +21,8 @@ class ScheduleController extends Controller
         if ($request->has('program_id')) {
             $query->where('program_id', $request->program_id);
         }
-
+        
+        // Gunakan start_time untuk urutan
         $schedules = $query->orderBy('start_time', 'desc')
             ->paginate($request->get('per_page', 15));
 
@@ -40,6 +40,10 @@ class ScheduleController extends Controller
             'type' => 'required|in:tryout,class',
             'class_type' => 'required_if:type,class|in:zoom,offline',
             'program_id' => 'nullable|exists:programs,id',
+            
+            // [BARU] Tambahkan validasi subject_id
+            'subject_id' => 'nullable|exists:subjects,id',
+            
             'teacher_id' => 'nullable|exists:teachers,id',
             'package_id' => 'nullable|exists:packages,id',
             'start_time' => 'required|date',
@@ -60,16 +64,18 @@ class ScheduleController extends Controller
 
         $schedule = Schedule::create($request->all());
 
+        // [UPDATE] Load relasi subject
         return response()->json([
             'success' => true,
             'message' => 'Jadwal berhasil dibuat',
-            'data' => $schedule->load(['program', 'teacher', 'package'])
+            'data' => $schedule->load(['program', 'subject', 'teacher.user', 'package'])
         ], 201);
     }
 
     public function show($id)
     {
-        $schedule = Schedule::with(['program', 'teacher', 'package', 'participants'])
+        // [UPDATE] Load relasi subject
+        $schedule = Schedule::with(['program', 'subject', 'teacher.user', 'package', 'participants'])
             ->findOrFail($id);
 
         return response()->json([
@@ -88,6 +94,10 @@ class ScheduleController extends Controller
             'type' => 'sometimes|in:tryout,class',
             'class_type' => 'nullable|in:zoom,offline',
             'program_id' => 'nullable|exists:programs,id',
+            
+            // [BARU] Tambahkan validasi subject_id
+            'subject_id' => 'nullable|exists:subjects,id',
+            
             'teacher_id' => 'nullable|exists:teachers,id',
             'package_id' => 'nullable|exists:packages,id',
             'start_time' => 'sometimes|date',
@@ -108,10 +118,11 @@ class ScheduleController extends Controller
 
         $schedule->update($request->all());
 
+        // [UPDATE] Load relasi subject
         return response()->json([
             'success' => true,
             'message' => 'Jadwal berhasil diperbarui',
-            'data' => $schedule->fresh()->load(['program', 'teacher', 'package'])
+            'data' => $schedule->fresh()->load(['program', 'subject', 'teacher.user', 'package'])
         ]);
     }
 

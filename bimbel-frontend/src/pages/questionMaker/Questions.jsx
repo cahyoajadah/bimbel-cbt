@@ -89,23 +89,22 @@ export default function Questions() {
     setValue('options', updated);
   };
 
+  // 1. Fix Create Mutation
   const createMutation = useMutation({
     mutationFn: async (data) => {
-      // Format data sebelum kirim (terutama untuk tipe 'short')
       const payload = { ...data };
       
-      // Jika tipe isian singkat, pastikan format option sesuai backend
       if (payload.type === 'short') {
         payload.options = [{
-          text: data.short_answer_key, // Ambil dari field khusus
+          option_text: data.short_answer_key, // Gunakan option_text
           is_correct: true,
           weight: 0
         }];
       } else {
-        // Regenerate labels (A, B, C...) sesuai urutan
         payload.options = data.options.map((opt, idx) => ({
           ...opt,
-          label: String.fromCharCode(65 + idx) // 65 = 'A'
+          option_text: opt.text, // <--- [PENTING] Mapping text ke option_text
+          label: String.fromCharCode(65 + idx)
         }));
       }
 
@@ -124,20 +123,21 @@ export default function Questions() {
     }
   });
 
+  // 2. Fix Update Mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
-      // Format data update sama seperti create
       const payload = { ...data };
       
       if (payload.type === 'short') {
         payload.options = [{
-          text: data.short_answer_key,
+          option_text: data.short_answer_key, // Gunakan option_text
           is_correct: true,
           weight: 0
         }];
       } else {
         payload.options = data.options.map((opt, idx) => ({
           ...opt,
+          option_text: opt.text, // <--- [PENTING] Mapping text ke option_text
           label: String.fromCharCode(65 + idx)
         }));
       }

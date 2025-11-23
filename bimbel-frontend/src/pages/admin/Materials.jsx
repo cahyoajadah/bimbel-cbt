@@ -1,10 +1,9 @@
-// src/pages/admin/Materials.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Video, FileText } from 'lucide-react';
-import { adminService } from '../../api/services/adminService';
+import { Plus, Edit, Trash2, FileText, Video, File, Search } from 'lucide-react';
+import api from '../../api/axiosConfig';
 import { Button } from '../../components/common/Button';
-import { Table, Pagination } from '../../components/common/Table';
+import { Table } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { useForm } from 'react-hook-form';
@@ -12,52 +11,88 @@ import { useUIStore } from '../../store/uiStore';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
-export default function AdminMaterials() {
+export default function Materials() {
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
-  const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState(null);
+  
+  // State Filter
+  const [selectedSubject, setSelectedSubject] = useState('');
 
-  // Fetch materials
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-materials', currentPage],
-    queryFn: () => adminService.getMaterials({ page: currentPage, per_page: 15 }),
-  });
-
-  const materials = data?.data?.data || [];
-  const pagination = data?.data?.meta || data?.data;
-
-  // Form
-  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
-    defaultValues: {
-      subject_id: '',
-      title: '',
-      description: '',
-      type: 'video',
-      content: '',
-      order: 0,
-      duration_minutes: '',
-      is_active: true,
+  // Fetch Subjects (untuk dropdown filter & form)
+  const { data: subjects } = useQuery({
+    queryKey: ['admin-subjects'],
+    queryFn: async () => {
+      // Endpoint admin/subjects harus mengembalikan array program
+      const res = await api.get('/admin/subjects'); 
+      return res.data.data;
     },
   });
 
-  const materialType = watch('type');
+  // Fetch Materials
+  const { data: materials, isLoading } = useQuery({
+    queryKey: ['admin-materials', selectedSubject],
+    queryFn: async () => {
+      const params = selectedSubject ? { subject_id: selectedSubject } : {};
+      // Backend harus eager load 'subject.program'
+      const res = await api.get('/admin/materials', { params }); 
+      return res.data.data; // Mengambil data Array (tanpa pagination)
+    },
+  });
 
-  // Create mutation
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm();
+  const watchedType = watch('type', 'text');
+
+  // Mutations
   const createMutation = useMutation({
-    mutationFn: adminService.createMaterial,
+    mutationFn: async (formData) => {
+      const data = new FormData();
+      data.append('subject_id', formData.subject_id);
+      data.append('title', formData.title);
+      data.append('type', formData.type);
+      data.append('description', formData.description || '');
+      
+      // Mengirim content_url atau content_file sesuai tipe
+      if (formData.type === 'pdf' && formData.content_file?.[0]) {
+        data.append('content_file', formData.content_file[0]); // Mengirim file
+      } else if (formData.content_url) {
+        data.append('content_url', formData.content_url); // Mengirim URL/Teks
+      }
+
+      const res = await api.post('/admin/materials', data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-materials']);
       setIsModalOpen(false);
       reset();
       toast.success('Materi berhasil dibuat');
     },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal membuat materi'),
   });
 
-  // Update mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => adminService.updateMaterial(id, data),
+    mutationFn: async ({ id, formData }) => {
+      const data = new FormData();
+      data.append('_method', 'PUT'); // Trick untuk PUT dengan FormData di Laravel
+      data.append('title', formData.title);
+      data.append('type', formData.type);
+      data.append('description', formData.description || '');
+
+      if (formData.type === 'pdf' && formData.content_file?.[0]) {
+        data.append('content_file', formData.content_file[0]);
+      } else if (formData.content_url) {
+        data.append('content_url', formData.content_url);
+      }
+
+      const res = await api.post(`/admin/materials/${id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-materials']);
       setIsModalOpen(false);
@@ -66,172 +101,92 @@ export default function AdminMaterials() {
       toast.success('Materi berhasil diperbarui');
     },
   });
-  const { data: subjectsData } = useQuery({
-    queryKey: ['admin-subjects-list'],
-    queryFn: () => adminService.getSubjects({ page: 1, per_page: 100 }), // Ambil semua subject
-  });
-  
-  const subjects = subjectsData?.data?.data || [];
 
-  // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: adminService.deleteMaterial,
+    mutationFn: async (id) => {
+      await api.delete(`/admin/materials/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-materials']);
       toast.success('Materi berhasil dihapus');
     },
   });
 
+  // Handlers
   const handleOpenModal = (material = null) => {
     if (material) {
       setEditingMaterial(material);
-      reset({
-        subject_id: material.subject_id,
-        title: material.title,
-        description: material.description || '',
-        type: material.type,
-        content: material.content || '',
-        order: material.order || 0,
-        duration_minutes: material.duration_minutes || '',
-        is_active: material.is_active,
-      });
+      setValue('subject_id', material.subject_id);
+      setValue('title', material.title);
+      setValue('type', material.type);
+      setValue('description', material.description);
+      // Asumsi: 'content' berisi URL/teks, atau path file
+      setValue('content_url', material.content); 
     } else {
       setEditingMaterial(null);
-      reset({
-        subject_id: '',
-        title: '',
-        description: '',
-        type: 'video',
-        content: '',
-        order: 0,
-        duration_minutes: '',
-        is_active: true,
-      });
+      reset({ type: 'text' });
+      if (selectedSubject) setValue('subject_id', selectedSubject);
     }
     setIsModalOpen(true);
-  };
-
-  // src/pages/admin/Materials.jsx
-
-  // src/pages/admin/Materials.jsx
-
-  const onSubmit = (data) => {
-    try {
-      const formData = new FormData();
-
-      // 1. Append Data Text (Pastikan semua ini ada)
-      formData.append('subject_id', data.subject_id);
-      formData.append('title', data.title);
-      formData.append('type', data.type);
-      formData.append('grade', data.grade || '');
-      formData.append('description', data.description || '');
-      formData.append('order', data.order || 0);
-      formData.append('duration_minutes', data.duration_minutes || 0);
-      formData.append('is_active', data.is_active ? '1' : '0');
-
-      // 2. Append File PDF (INI PERBAIKAN UTAMANYA)
-      if (data.type === 'pdf') {
-         // PERHATIKAN: Gunakan 'data.pdf_file', BUKAN 'data.file'
-         if (data.pdf_file && data.pdf_file[0]) {
-            // PERHATIKAN: Kirim dengan key 'pdf_file', BUKAN 'file'
-            formData.append('pdf_file', data.pdf_file[0]); 
-         }
-      } else {
-         // Jika Video/Link
-         formData.append('content', data.content);
-      }
-
-      // 3. Kirim ke Service
-      if (editingMaterial) {
-         formData.append('_method', 'PUT'); // Wajib untuk update file di Laravel
-         updateMutation.mutate({ id: editingMaterial.id, data: formData });
-      } else {
-         createMutation.mutate(formData);
-      }
-
-    } catch (error) {
-      console.error("Form Error:", error);
-      toast.error("Gagal menyusun data form");
-    }
   };
 
   const handleDelete = (material) => {
     showConfirm({
       title: 'Hapus Materi',
-      message: `Apakah Anda yakin ingin menghapus materi "${material.title}"?`,
-      type: 'danger',
+      message: `Yakin ingin menghapus materi "${material.title}"?`,
       confirmText: 'Hapus',
+      type: 'danger',
       onConfirm: () => deleteMutation.mutate(material.id),
     });
   };
 
+  const onSubmit = (data) => {
+    if (editingMaterial) {
+      updateMutation.mutate({ id: editingMaterial.id, formData: data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
+  // Columns Definition
   const columns = [
-    {
-      header: 'Judul Materi',
-      accessor: 'title',
+    { 
+      header: 'Urutan', 
+      accessor: 'order_number',
+      className: 'text-center w-16 font-bold text-gray-500' 
     },
-    {
-      header: 'Tipe',
+    { 
+      // [PERBAIKAN] Kolom Mata Pelajaran: Mengakses subject.name dan subject.program.name
+      header: 'Mata Pelajaran', 
       render: (row) => (
-        <div className="flex items-center space-x-2">
-          {row.type === 'video' ? (
-            <>
-              <Video className="w-4 h-4 text-red-600" />
-              <span className="text-sm">Video</span>
-            </>
-          ) : (
-            <>
-              <FileText className="w-4 h-4 text-blue-600" />
-              <span className="text-sm">PDF</span>
-            </>
-          )}
-        </div>
-      ),
+          <div>
+              <span className="font-medium text-gray-900">{row.subject?.name || '-'}</span>
+              <div className="text-xs text-gray-500">{row.subject?.program?.name || '-'}</div>
+          </div>
+      )
     },
-    {
-      header: 'Urutan',
-      accessor: 'order',
+    { 
+      header: 'Tipe', 
+      render: (row) => {
+        const icons = {
+          video: <Video size={16} className="text-red-500" />,
+          pdf: <File size={16} className="text-orange-500" />,
+          text: <FileText size={16} className="text-blue-500" />,
+        };
+        return (
+          <div className="flex items-center gap-2">
+            {icons[row.type]} <span className="capitalize">{row.type}</span>
+          </div>
+        );
+      }
     },
-    {
-      header: 'Durasi',
-      render: (row) => row.duration_minutes ? `${row.duration_minutes} menit` : '-',
-    },
-    {
-      header: 'Status',
-      render: (row) => (
-        <span
-          className={clsx(
-            'px-2 py-1 text-xs font-medium rounded-full',
-            row.is_active
-              ? 'bg-green-100 text-green-800'
-              : 'bg-gray-100 text-gray-800'
-          )}
-        >
-          {row.is_active ? 'Aktif' : 'Tidak Aktif'}
-        </span>
-      ),
-    },
+    { header: 'Judul', accessor: 'title' },
     {
       header: 'Aksi',
       render: (row) => (
-        <div className="flex items-center space-x-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Edit}
-            onClick={() => handleOpenModal(row)}
-          >
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={Trash2}
-            onClick={() => handleDelete(row)}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            Hapus
-          </Button>
+        <div className="flex space-x-2">
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
         </div>
       ),
     },
@@ -239,165 +194,104 @@ export default function AdminMaterials() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Materi Pembelajaran</h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Kelola materi video dan PDF untuk siswa
-          </p>
-        </div>
-        <Button icon={Plus} onClick={() => handleOpenModal()}>
-          Tambah Materi
-        </Button>
+        <h1 className="text-2xl font-bold text-gray-800">Manajemen Materi</h1>
+        <Button icon={Plus} onClick={() => handleOpenModal()}>Tambah Materi</Button>
+      </div>
+
+      {/* Filter Subject */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 w-full md:w-1/3">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Filter Mata Pelajaran</label>
+        <select
+          className="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          value={selectedSubject}
+          onChange={(e) => setSelectedSubject(e.target.value)}
+        >
+          <option value="">Semua Mata Pelajaran</option>
+          {subjects?.map((sub) => (
+            <option key={sub.id} value={sub.id}>{sub.name} - {sub.program?.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow">
-        <Table columns={columns} data={materials} loading={isLoading} />
-        
-        {pagination && (
-          <Pagination
-            currentPage={pagination.current_page || currentPage}
-            totalPages={pagination.last_page || 1}
-            onPageChange={setCurrentPage}
-            perPage={pagination.per_page || 15}
-            total={pagination.total || 0}
-          />
-        )}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <Table columns={columns} data={materials || []} loading={isLoading} />
       </div>
 
-      {/* Create/Edit Modal */}
+      {/* Modal Form */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingMaterial(null);
-          reset();
-        }}
+        onClose={() => setIsModalOpen(false)}
         title={editingMaterial ? 'Edit Materi' : 'Tambah Materi Baru'}
-        size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* --- GANTI INI --- */}
+          
+          {/* Subject Selection (Disabled jika edit atau sudah difilter) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mata Pelajaran <span className="text-red-500">*</span>
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Mata Pelajaran</label>
             <select
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-              {...register('subject_id', { required: 'Mata Pelajaran wajib dipilih' })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              {...register('subject_id', { required: 'Mata pelajaran wajib dipilih' })}
+              disabled={editingMaterial}
             >
-              <option value="">-- Pilih Mata Pelajaran --</option>
-              {subjects.map((subj) => (
-                <option key={subj.id} value={subj.id}>
-                  {subj.name} {subj.program ? `(${subj.program.name})` : ''}
-                </option>
+              <option value="">Pilih Mata Pelajaran</option>
+              {subjects?.map((sub) => (
+                <option key={sub.id} value={sub.id}>{sub.name} - {sub.program?.name}</option>
               ))}
             </select>
-            {errors.subject_id && (
-              <p className="mt-1 text-sm text-red-600">{errors.subject_id.message}</p>
-            )}
-          </div>
-          {/* ----------------- */}
-
-          <Input
-            label="Judul Materi"
-            required
-            error={errors.title?.message}
-            {...register('title', { required: 'Judul wajib diisi' })}
-          />
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Deskripsi
-            </label>
-            <textarea
-              rows={3}
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2"
-              {...register('description')}
-            />
+            {errors.subject_id && <p className="text-red-500 text-xs mt-1">{errors.subject_id.message}</p>}
           </div>
 
+          <Input label="Judul Materi" {...register('title', { required: 'Judul wajib diisi' })} error={errors.title} />
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tipe Materi <span className="text-red-500">*</span>
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Tipe Materi</label>
             <select
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2"
-              {...register('type', { required: true })}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              {...register('type')}
             >
-              <option value="video">Video (YouTube)</option>
-              <option value="pdf">PDF</option>
+              <option value="text">Teks / Artikel</option>
+              <option value="video">Video (YouTube/Link)</option>
+              <option value="pdf">Dokumen PDF</option>
             </select>
           </div>
 
-          {materialType === 'video' ? (
-            <Input
-              label="Link YouTube"
-              type="url"
-              placeholder="https://www.youtube.com/watch?v=..."
-              required
-              error={errors.content?.message}
-              {...register('content', { required: 'Link YouTube wajib diisi' })}
-            />
-          ) : (
+          {/* Dynamic Content Input */}
+          {watchedType === 'pdf' ? (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Upload PDF <span className="text-red-500">*</span>
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Upload File PDF</label>
               <input
                 type="file"
                 accept=".pdf"
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                {...register('pdf_file')}
+                className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                {...register('content_file', { required: !editingMaterial && watchedType === 'pdf' })}
               />
+              {editingMaterial && <p className="text-xs text-gray-500 mt-1">Biarkan kosong jika tidak ingin mengubah file.</p>}
             </div>
+          ) : (
+            <Input 
+              label={watchedType === 'video' ? 'Link Video (YouTube)' : 'Link Artikel / Konten'} 
+              placeholder="https://..."
+              {...register('content_url', { required: 'Link konten wajib diisi' })}
+              error={errors.content_url}
+            />
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Urutan"
-              type="number"
-              {...register('order')}
-            />
-
-            <Input
-              label="Durasi (menit)"
-              type="number"
-              {...register('duration_minutes')}
-            />
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Deskripsi (Opsional)</label>
+            <textarea
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              rows="3"
+              {...register('description')}
+            ></textarea>
           </div>
 
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="is_active"
-              className="rounded border-gray-300"
-              {...register('is_active')}
-            />
-            <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
-              Materi Aktif
-            </label>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setIsModalOpen(false);
-                setEditingMaterial(null);
-                reset();
-              }}
-            >
-              Batal
-            </Button>
-            <Button
-              type="submit"
-              loading={createMutation.isPending || updateMutation.isPending}
-            >
-              {editingMaterial ? 'Perbarui' : 'Simpan'}
+          {/* Tombol Simpan */}
+          <div className="flex justify-end space-x-3 pt-4 border-t mt-4">
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
+              {editingMaterial ? 'Simpan Perubahan' : 'Buat Materi'}
             </Button>
           </div>
         </form>
