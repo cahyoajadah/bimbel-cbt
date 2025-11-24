@@ -1,6 +1,7 @@
+// src/pages/admin/Schedules.jsx
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Calendar as CalIcon, Clock, User, MapPin, Link as LinkIcon, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Calendar as CalIcon, Clock, User, MapPin, Link as LinkIcon, Search, Monitor } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { Button } from '../../components/common/Button';
 import { Table, Pagination } from '../../components/common/Table';
@@ -9,6 +10,7 @@ import { Input } from '../../components/common/Input';
 import { useForm } from 'react-hook-form';
 import { useUIStore } from '../../store/uiStore';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 
 export default function AdminSchedules() {
   const queryClient = useQueryClient();
@@ -16,9 +18,10 @@ export default function AdminSchedules() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [search, setSearch] = useState(''); // State Search
+  const [search, setSearch] = useState(''); 
+  const [filteredSubjects, setFilteredSubjects] = useState([]);
 
-  // --- FETCH DATA LISTS (Dropdown Resources) ---
+  // --- FETCH DATA LISTS ---
   const { data: programsData } = useQuery({
     queryKey: ['admin-programs-list'],
     queryFn: async () => (await api.get('/admin/programs')).data,
@@ -37,7 +40,7 @@ export default function AdminSchedules() {
   });
   const allTeachersList = allTeachersData?.data?.data || allTeachersData?.data || [];
   
-  // --- FETCH SCHEDULES (Paginated Table Data) ---
+  // --- FETCH SCHEDULES ---
   const { data: scheduleData, isLoading } = useQuery({
     queryKey: ['admin-schedules', currentPage, search],
     queryFn: async () => (await api.get(`/admin/schedules?page=${currentPage}&per_page=15&search=${search}`)).data,
@@ -52,23 +55,31 @@ export default function AdminSchedules() {
   });
 
   const classType = watch('class_type_select');
-  const scheduleType = watch('type'); 
+  const scheduleType = watch('type');
   const selectedProgramId = watch('program_id');
 
-  // --- [OPTIMASI FILTER MAPEL] ---
-  // Filter subject berdasarkan program yang dipilih
-  const filteredSubjects = useMemo(() => {
-    if (!selectedProgramId || !allSubjects.length) return [];
-    return allSubjects.filter(s => s.program_id == selectedProgramId);
-  }, [selectedProgramId, allSubjects]);
-
-  // Reset subject jika program berubah (Hanya jika user sedang mengubah program secara manual)
+  // --- LOGIKA FILTER MAPEL ---
   useEffect(() => {
-     if (isModalOpen && !editingSchedule) {
-         setValue('subject_id', '');
-     }
-  }, [selectedProgramId]);
+    if (allSubjects && Array.isArray(allSubjects)) {
+        const currentProgramId = getValues('program_id');
+        const currentSubjectId = getValues('subject_id'); 
+        
+        const filtered = currentProgramId && allSubjects 
+            ? allSubjects.filter(s => s.program_id == currentProgramId)
+            : [];
+        
+        setFilteredSubjects(filtered); 
 
+        if (currentSubjectId && currentSubjectId !== '') {
+             const isSubjectStillValid = filtered.some(s => s.id == currentSubjectId);
+             if (!isSubjectStillValid) { 
+                setValue('subject_id', '', { shouldValidate: true }); 
+             }
+        }
+    } else {
+        setFilteredSubjects([]);
+    }
+  }, [selectedProgramId, allSubjects, getValues, setValue]);
 
   // --- MUTATIONS ---
   const createMutation = useMutation({
@@ -78,7 +89,8 @@ export default function AdminSchedules() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-schedules']);
-      handleCloseModal();
+      setIsModalOpen(false);
+      reset();
       toast.success('Jadwal berhasil dibuat');
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Gagal membuat jadwal'),
@@ -91,10 +103,11 @@ export default function AdminSchedules() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-schedules']);
-      handleCloseModal();
+      setIsModalOpen(false);
+      setEditingSchedule(null);
+      reset();
       toast.success('Jadwal berhasil diperbarui');
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal update jadwal'),
   });
 
   const deleteMutation = useMutation({
@@ -112,54 +125,36 @@ export default function AdminSchedules() {
     if (schedule) {
       setEditingSchedule(schedule);
       
-      // Parse waktu dengan aman
-      let startTimeVal = '';
-      let endTimeVal = '';
-      try {
-          const startObj = new Date(schedule.start_time);
-          const endObj = new Date(schedule.end_time);
-          // Ambil HH:mm (5 karakter)
-          startTimeVal = startObj.toTimeString().slice(0, 5); 
-          endTimeVal = endObj.toTimeString().slice(0, 5);
-      } catch (e) {
-          console.error("Error parsing date", e);
-      }
+      const startDateObj = new Date(schedule.start_time);
+      const endDateObj = new Date(schedule.end_time);
+      
+      setValue('title', schedule.title);
+      setValue('type', schedule.type);
+      setValue('program_id', schedule.program_id || '');
+      
+      // Set values with timeout to allow filtered lists to populate
+      setTimeout(() => {
+          setValue('subject_id', schedule.subject_id || '');
+          setValue('teacher_id', schedule.teacher_id || '');
+      }, 100);
 
-      // [PERBAIKAN] Gunakan reset() untuk mengisi semua data sekaligus
-      // Ini mencegah 'race condition' antara program_id dan subject_id
-      reset({
-          title: schedule.title,
-          type: schedule.type,
-          program_id: schedule.program_id || '',
-          subject_id: schedule.subject_id || '', // Reset subject dengan nilai yang benar
-          teacher_id: schedule.teacher_id || '',
-          date: new Date(schedule.start_time).toISOString().split('T')[0],
-          start_clock: startTimeVal,
-          end_clock: endTimeVal,
-          class_type_select: schedule.class_type || 'offline',
-          zoom_link: schedule.zoom_link || '',
-          location: schedule.location || '',
-          description: schedule.description || '',
-          is_active: schedule.is_active,
-          max_participants: schedule.max_participants
-      });
+      setValue('date', startDateObj.toISOString().split('T')[0]);
+      setValue('start_clock', startDateObj.toTimeString().slice(0, 5));
+      setValue('end_clock', endDateObj.toTimeString().slice(0, 5));
+      setValue('class_type_select', schedule.class_type || 'offline');
+      
+      if (schedule.class_type === 'zoom') setValue('zoom_link', schedule.zoom_link);
+      else setValue('location', schedule.location);
+      
+      setValue('description', schedule.description);
+      setValue('is_active', schedule.is_active);
+      setValue('max_participants', schedule.max_participants);
     } else {
       setEditingSchedule(null);
-      reset({ 
-          class_type_select: 'offline', 
-          type: 'class', 
-          is_active: true,
-          program_id: '',
-          subject_id: ''
-      });
+      reset({ class_type_select: 'offline', type: 'class', is_active: true });
+      setFilteredSubjects([]);
     }
     setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-      setIsModalOpen(false);
-      setEditingSchedule(null);
-      reset(); // Bersihkan form
   };
 
   const handleDelete = (schedule) => {
@@ -172,18 +167,19 @@ export default function AdminSchedules() {
   };
 
   const onSubmit = (data) => {
-    // Gabung Tanggal + Jam
     const startDateTime = `${data.date} ${data.start_clock}:00`;
     const endDateTime = `${data.date} ${data.end_clock}:00`;
 
     const payload = {
         title: data.title,
         type: data.type,
-        class_type: data.class_type_select,
+        class_type: data.class_type_select, // [PENTING] Ini harus terisi untuk Tryout juga
         program_id: data.program_id,
-        // Null-kan jika tryout
+        
+        // Jika tryout, null-kan subject & teacher
         subject_id: data.type === 'tryout' ? null : data.subject_id,
         teacher_id: data.type === 'tryout' ? null : data.teacher_id,
+        
         package_id: data.package_id,
         start_time: startDateTime,
         end_time: endDateTime,
@@ -192,6 +188,7 @@ export default function AdminSchedules() {
         max_participants: data.max_participants,
     };
 
+    // Set Location/Link sesuai tipe
     if (data.class_type_select === 'zoom') {
         payload.zoom_link = data.zoom_link;
         payload.location = 'Online (Zoom)';
@@ -225,7 +222,10 @@ export default function AdminSchedules() {
                 {row.type === 'class' && (
                     <div className="text-xs text-gray-600">{row.subject?.name} ({row.program?.name})</div>
                 )}
-                <span className={`text-[10px] px-1.5 py-0.5 rounded ${row.type === 'tryout' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                <span className={clsx(
+                    "text-[10px] px-1.5 py-0.5 rounded mt-1 inline-block",
+                    row.type === 'tryout' ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                )}>
                     {row.type === 'tryout' ? 'Tryout' : 'Kelas'}
                 </span>
             </div>
@@ -246,7 +246,7 @@ export default function AdminSchedules() {
         header: 'Lokasi', 
         render: (row) => (
             <span className={`px-2 py-1 rounded text-xs font-medium border ${row.class_type === 'zoom' ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-orange-50 border-orange-200 text-orange-700'}`}>
-                {row.class_type === 'zoom' ? 'Online' : row.location}
+                {row.class_type === 'zoom' ? 'Online' : 'Offline'}
             </span>
         )
     },
@@ -254,8 +254,8 @@ export default function AdminSchedules() {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>Edit</Button>
-          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50">Hapus</Button>
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
         </div>
       ),
     },
@@ -268,12 +268,11 @@ export default function AdminSchedules() {
         <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Jadwal</Button>
       </div>
 
-      {/* [PERBAIKAN] SEARCH BAR */}
       <div className="flex items-center space-x-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <Search className="w-5 h-5 text-gray-400" />
         <input 
             type="text" 
-            placeholder="Cari jadwal, mapel, atau deskripsi..." 
+            placeholder="Cari jadwal..." 
             className="flex-1 border-none focus:ring-0 text-sm outline-none"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -295,18 +294,13 @@ export default function AdminSchedules() {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => setIsModalOpen(false)}
         title={editingSchedule ? 'Edit Jadwal' : 'Tambah Jadwal Baru'}
         size="lg"
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           
-          <Input 
-            label="Judul Kegiatan" 
-            placeholder="Contoh: Pembahasan Soal" 
-            {...register('title', { required: 'Judul wajib diisi' })} 
-            error={errors.title?.message} 
-          />
+          <Input label="Judul Kegiatan" placeholder="Contoh: Tryout SKD Akbar" {...register('title', { required: 'Judul wajib diisi' })} error={errors.title} />
 
           <div className="grid grid-cols-2 gap-4">
              <div>
@@ -327,6 +321,7 @@ export default function AdminSchedules() {
             </div>
           </div>
 
+          {/* TAMPILKAN HANYA JIKA KELAS (Tryout biasanya tidak butuh mapel/guru spesifik di jadwal, tapi jika butuh, hapus kondisi ini) */}
           {scheduleType === 'class' && (
               <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
                 <div>
@@ -358,34 +353,25 @@ export default function AdminSchedules() {
               </div>
           )}
 
+          {/* [PERBAIKAN UTAMA] MODE PELAKSANAAN SELALU MUNCUL */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Mode Pelaksanaan</label>
             <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg w-full hover:bg-gray-50">
-                    <input type="radio" value="offline" {...register('class_type_select')} className="text-blue-600" />
-                    <div className="flex items-center gap-2 text-sm font-medium"><MapPin size={16}/> Offline</div>
+                <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg w-full hover:bg-gray-50 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500">
+                    <input type="radio" value="offline" {...register('class_type_select')} className="text-blue-600 focus:ring-blue-500" />
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700"><MapPin size={16}/> Offline (Tatap Muka)</div>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg w-full hover:bg-gray-50">
-                    <input type="radio" value="zoom" {...register('class_type_select')} className="text-blue-600" />
-                    <div className="flex items-center gap-2 text-sm font-medium"><LinkIcon size={16}/> Online</div>
+                <label className="flex items-center gap-2 cursor-pointer border p-3 rounded-lg w-full hover:bg-gray-50 has-[:checked]:bg-purple-50 has-[:checked]:border-purple-500">
+                    <input type="radio" value="zoom" {...register('class_type_select')} className="text-purple-600 focus:ring-purple-500" />
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700"><Monitor size={16}/> Online (Zoom/GMeet)</div>
                 </label>
             </div>
           </div>
 
           {classType === 'zoom' ? (
-             <Input 
-                label="Link Meeting" 
-                placeholder="https://zoom.us/..." 
-                {...register('zoom_link', { required: 'Link Zoom wajib diisi' })} 
-                error={errors.zoom_link?.message} 
-             />
+             <Input label="Link Meeting" placeholder="https://zoom.us/..." {...register('zoom_link', { required: 'Link Zoom wajib diisi' })} error={errors.zoom_link?.message} />
           ) : (
-             <Input 
-                label="Lokasi Ruangan" 
-                placeholder="Ruang 101" 
-                {...register('location', { required: 'Lokasi wajib diisi' })} 
-                error={errors.location?.message} 
-             />
+             <Input label="Lokasi Ruangan" placeholder="Ruang 101" {...register('location', { required: 'Lokasi wajib diisi' })} error={errors.location?.message} />
           )}
 
           <div className="grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
@@ -408,7 +394,7 @@ export default function AdminSchedules() {
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
             <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
               {editingSchedule ? 'Simpan' : 'Buat Jadwal'}
             </Button>

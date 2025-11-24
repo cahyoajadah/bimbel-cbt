@@ -1,22 +1,16 @@
-// ============================================
-// src/pages/questionMaker/QuestionPackages.jsx
-// ============================================
-// src/pages/questionMaker/QuestionPackages.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, FileText, Clock, CheckCircle, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, List, Calendar } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
-import { adminService } from '../../api/services/adminService'; // Gunakan service yang ada getPrograms
 import { Button } from '../../components/common/Button';
-import { Table, Pagination } from '../../components/common/Table';
+import { Table } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { useForm } from 'react-hook-form';
 import { useUIStore } from '../../store/uiStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import clsx from 'clsx';
 
 export default function QuestionPackages() {
   const navigate = useNavigate();
@@ -24,27 +18,26 @@ export default function QuestionPackages() {
   const { showConfirm } = useUIStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState(null);
-  const [search, setSearch] = useState('');
 
-  // 1. Fetch Question Packages
-  const { data, isLoading } = useQuery({
+  // Fetch Data Packages
+  const { data: packagesData, isLoading } = useQuery({
     queryKey: ['question-packages'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.QUESTION_PACKAGES);
-      return res.data;
+      return res.data.data;
     },
   });
 
-  // 2. Fetch Programs (Untuk Dropdown)
-  // Kita bisa menggunakan adminService.getPrograms() karena endpointnya public/shared untuk admin & question maker
-  const { data: programsData } = useQuery({
-    queryKey: ['programs-list'],
-    // Gunakan getPublicPrograms agar Pembuat Soal diizinkan akses
-    queryFn: () => adminService.getPublicPrograms(), 
-  });
+  const packages = packagesData?.data || []; 
 
-  const packages = data?.data?.data || []; // Sesuaikan struktur response pagination
-  const programs = programsData?.data || [];
+  // Fetch Programs (Gunakan endpoint umum)
+  const { data: programs } = useQuery({
+    queryKey: ['common-programs'], 
+    queryFn: async () => {
+      const res = await api.get('/programs'); 
+      return res.data.data;
+    },
+  });
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
 
@@ -56,10 +49,11 @@ export default function QuestionPackages() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['question-packages']);
-      handleCloseModal();
+      setIsModalOpen(false);
+      reset();
       toast.success('Paket soal berhasil dibuat');
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal menyimpan'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal membuat paket'),
   });
 
   const updateMutation = useMutation({
@@ -69,8 +63,10 @@ export default function QuestionPackages() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['question-packages']);
-      handleCloseModal();
-      toast.success('Paket soal diperbarui');
+      setIsModalOpen(false);
+      setEditingPackage(null);
+      reset();
+      toast.success('Paket soal berhasil diperbarui');
     },
   });
 
@@ -84,40 +80,47 @@ export default function QuestionPackages() {
     },
   });
 
+  // Handlers
   const handleOpenModal = (pkg = null) => {
     if (pkg) {
       setEditingPackage(pkg);
+      setValue('program_id', pkg.program_id);
       setValue('name', pkg.name);
       setValue('description', pkg.description);
-      setValue('program_id', pkg.program_id); // Set Program ID
       setValue('duration_minutes', pkg.duration_minutes);
       setValue('passing_score', pkg.passing_score);
+      
+      setValue('start_date', pkg.start_date ? pkg.start_date.split('T')[0] : '');
+      setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');
+      
       setValue('is_active', pkg.is_active);
     } else {
       setEditingPackage(null);
-      reset({
-        name: '',
-        description: '',
-        program_id: '',
-        duration_minutes: 120,
-        passing_score: 0,
-        is_active: true
+      reset({ 
+          is_active: true, 
+          duration_minutes: 120, 
+          passing_score: 65,
+          start_date: '',
+          end_date: ''
       });
     }
     setIsModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingPackage(null);
-    reset();
+  const handleDelete = (pkg) => {
+    showConfirm({
+      title: 'Hapus Paket Soal',
+      message: `Yakin ingin menghapus paket "${pkg.name}"?`,
+      type: 'danger',
+      confirmText: 'Hapus',
+      onConfirm: () => deleteMutation.mutate(pkg.id),
+    });
   };
 
   const onSubmit = (data) => {
-    const payload = {
-        ...data,
-        is_active: data.is_active ? 1 : 0, // Pastikan boolean dikirim sebagai 1/0 jika perlu
-    };
+    const payload = { ...data };
+    if (!payload.start_date) payload.start_date = null;
+    if (!payload.end_date) payload.end_date = null;
 
     if (editingPackage) {
       updateMutation.mutate({ id: editingPackage.id, data: payload });
@@ -127,63 +130,74 @@ export default function QuestionPackages() {
   };
 
   const columns = [
-    {
-      header: 'Nama Paket',
+    { 
+      header: 'Nama Paket', 
       render: (row) => (
         <div>
-          <div className="font-medium text-gray-900">{row.name}</div>
-          <div className="text-xs text-gray-500 truncate max-w-xs">{row.description}</div>
+            <div className="font-bold text-gray-900">{row.name}</div>
+            <div className="text-xs text-gray-500">{row.program?.name}</div>
         </div>
-      ),
+      )
     },
-    {
-        header: 'Program',
-        render: (row) => (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                {row.program?.name || '-'}
-            </span>
-        )
-    },
-    {
-      header: 'Info',
+    { header: 'Durasi', accessor: 'duration_minutes', render: (row) => `${row.duration_minutes} Menit` },
+    { 
+      header: 'Periode Aktif', 
       render: (row) => (
-        <div className="flex flex-col space-y-1 text-xs text-gray-500">
-          <div className="flex items-center">
-            <Clock className="w-3 h-3 mr-1" /> {row.duration_minutes} m
-          </div>
-          <div className="flex items-center">
-            <CheckCircle className="w-3 h-3 mr-1" /> KKM: {row.passing_score}
-          </div>
-          <div className="flex items-center">
-            <FileText className="w-3 h-3 mr-1" /> {row.total_questions || 0} Soal
-          </div>
+        <div className="text-xs">
+            {row.start_date ? (
+                <div className="flex items-center gap-1 text-gray-700">
+                    <Calendar size={12} />
+                    {new Date(row.start_date).toLocaleDateString('id-ID')} - 
+                    {row.end_date ? new Date(row.end_date).toLocaleDateString('id-ID') : 'Seterusnya'}
+                </div>
+            ) : (
+                <span className="text-gray-400 italic">Selalu Aktif</span>
+            )}
         </div>
-      ),
+      )
     },
-    {
-      header: 'Status',
+    { 
+      header: 'Status', 
       render: (row) => (
-        <span className={clsx('px-2 py-1 text-xs rounded-full', row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800')}>
-          {row.is_active ? 'Aktif' : 'Draft'}
+        <span className={`px-2 py-1 text-xs rounded-full ${row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+          {row.is_active ? 'Aktif' : 'Nonaktif'}
         </span>
-      ),
+      )
     },
     {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          <Button size="sm" onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)}>
+          {/* TOMBOL SOAL */}
+          <Button 
+            size="sm" 
+            variant="outline" 
+            icon={List} 
+            onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)}
+          >
             Soal
           </Button>
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
-          <Button size="sm" variant="ghost" icon={Trash2} className="text-red-600" 
-            onClick={() => showConfirm({
-              title: 'Hapus Paket',
-              message: 'Yakin hapus paket soal ini?',
-              type: 'danger',
-              onConfirm: () => deleteMutation.mutate(row.id)
-            })} 
-          />
+          
+          {/* TOMBOL EDIT (DENGAN TEKS) */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            icon={Edit} 
+            onClick={() => handleOpenModal(row)}
+          >
+            Edit
+          </Button>
+
+          {/* TOMBOL HAPUS (DENGAN TEKS) */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            icon={Trash2} 
+            onClick={() => handleDelete(row)} 
+            className="text-red-600 hover:bg-red-50"
+          >
+            Hapus
+          </Button>
         </div>
       ),
     },
@@ -192,61 +206,75 @@ export default function QuestionPackages() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Paket Soal</h1>
-          <p className="text-sm text-gray-600">Kelola paket soal tryout</p>
-        </div>
-        <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Paket</Button>
+        <h1 className="text-2xl font-bold text-gray-800">Bank Soal</h1>
+        <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Paket Baru</Button>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow overflow-hidden">
         <Table columns={columns} data={packages} loading={isLoading} />
       </div>
 
       <Modal
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => setIsModalOpen(false)}
         title={editingPackage ? 'Edit Paket Soal' : 'Buat Paket Soal Baru'}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           
-          {/* DROPDOWN PROGRAM */}
+          <Input label="Nama Paket" placeholder="Contoh: Tryout SKD 1" {...register('name', { required: 'Nama wajib diisi' })} />
+          
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                Program <span className="text-red-500">*</span>
-            </label>
-            <select
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+            <label className="block text-sm font-medium text-gray-700 mb-1">Program</label>
+            <select 
+                className="w-full border-gray-300 rounded-lg shadow-sm p-2 border" 
                 {...register('program_id', { required: 'Program wajib dipilih' })}
             >
                 <option value="">-- Pilih Program --</option>
-                {programs.map((prog) => (
-                    <option key={prog.id} value={prog.id}>{prog.name}</option>
-                ))}
+                {programs?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            {errors.program_id && <p className="text-red-500 text-xs mt-1">{errors.program_id.message}</p>}
-          </div>
-
-          <Input label="Nama Paket" required {...register('name', { required: 'Wajib diisi' })} />
-          
-          <div>
-             <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
-             <textarea className="block w-full rounded-lg border border-gray-300 px-3 py-2" {...register('description')} rows={2} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Durasi (menit)" type="number" {...register('duration_minutes', { required: true })} />
-            <Input label="Passing Score" type="number" {...register('passing_score')} />
+            <Input 
+                type="number" 
+                label="Durasi (Menit)" 
+                {...register('duration_minutes', { required: true, min: 1 })} 
+            />
+            <Input 
+                type="number" 
+                label="KKM / Passing Score" 
+                {...register('passing_score', { required: true, min: 0 })} 
+            />
           </div>
 
-          <div className="flex items-center space-x-2">
-            <input type="checkbox" id="active" className="rounded border-gray-300" {...register('is_active')} />
-            <label htmlFor="active" className="text-sm text-gray-700">Aktifkan Paket ini</label>
+          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+              <label className="block text-sm font-bold text-blue-800 mb-2">Periode Aktif (Opsional)</label>
+              <div className="grid grid-cols-2 gap-4">
+                <Input type="date" label="Mulai Tanggal" {...register('start_date')} className="bg-white" />
+                <Input type="date" label="Sampai Tanggal" {...register('end_date')} className="bg-white" />
+              </div>
+              <p className="text-xs text-blue-600 mt-1">* Kosongkan jika paket ini berlaku selamanya.</p>
           </div>
 
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
-            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Deskripsi</label>
+            <textarea 
+                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border" 
+                rows="2" 
+                {...register('description')}
+            ></textarea>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="isActive" {...register('is_active')} className="rounded text-blue-600" />
+            <label htmlFor="isActive" className="text-sm text-gray-700">Paket Aktif</label>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
+              {editingPackage ? 'Simpan' : 'Buat Paket'}
+            </Button>
           </div>
         </form>
       </Modal>

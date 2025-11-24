@@ -11,19 +11,14 @@ class QuestionPackageController extends Controller
 {
     public function index(Request $request)
     {
-        $query = QuestionPackage::with(['subject', 'creator']);
-
+        $query = QuestionPackage::with('program');
+        
         if ($request->has('search')) {
-            $search = $request->search;
-            $query->where('name', 'like', "%{$search}%");
+            $query->where('name', 'like', '%' . $request->search . '%');
         }
 
-        // Filter hanya paket milik user yang login (kecuali admin)
-        if ($request->user()->role !== 'admin_manajemen') {
-            $query->where('created_by', $request->user()->id);
-        }
-
-        $packages = $query->latest()->paginate(10);
+        $packages = $query->orderBy('created_at', 'desc')
+            ->paginate($request->get('per_page', 15));
 
         return response()->json([
             'success' => true,
@@ -34,33 +29,22 @@ class QuestionPackageController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'subject_id' => 'required|exists:subjects,id',
+            'program_id' => 'required|exists:programs,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'class_level' => 'required|integer',
-            'program_type' => 'required|in:IPA,IPS,IPC',
+            'duration_minutes' => 'required|integer|min:1',
+            'passing_score' => 'required|integer|min:0',
+            // [BARU] Validasi Tanggal
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
             'is_active' => 'boolean',
-            // [BARU] Validasi Waktu
-            'start_time' => 'nullable|date',
-            'end_time' => 'nullable|date|after:start_time', // Selesai harus setelah Mulai
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $package = QuestionPackage::create([
-            'created_by' => $request->user()->id,
-            'subject_id' => $request->subject_id,
-            'name' => $request->name,
-            'description' => $request->description,
-            'class_level' => $request->class_level,
-            'program_type' => $request->program_type,
-            'is_active' => $request->is_active ?? true,
-            // [BARU] Simpan Waktu
-            'start_time' => $request->start_time,
-            'end_time' => $request->end_time,
-        ]);
+        $package = QuestionPackage::create($request->all());
 
         return response()->json([
             'success' => true,
@@ -71,28 +55,31 @@ class QuestionPackageController extends Controller
 
     public function show($id)
     {
-        $package = QuestionPackage::with(['subject', 'questions'])->findOrFail($id);
-        return response()->json(['success' => true, 'data' => $package]);
+        $package = QuestionPackage::with(['program', 'questions'])->findOrFail($id);
+        
+        // Tambahkan atribut total_questions
+        $package->total_questions = $package->questions->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => $package
+        ]);
     }
 
     public function update(Request $request, $id)
     {
         $package = QuestionPackage::findOrFail($id);
 
-        if ($request->user()->id !== $package->created_by && $request->user()->role !== 'admin_manajemen') {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
         $validator = Validator::make($request->all(), [
-            'subject_id' => 'sometimes|exists:subjects,id',
-            'name' => 'sometimes|string|max:255',
+            'program_id' => 'required|exists:programs,id',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'class_level' => 'sometimes|integer',
-            'program_type' => 'sometimes|in:IPA,IPS,IPC',
+            'duration_minutes' => 'required|integer|min:1',
+            'passing_score' => 'required|integer|min:0',
+            // [BARU] Validasi Tanggal
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
             'is_active' => 'boolean',
-            // [BARU] Validasi Update
-            'start_time' => 'nullable|date',
-            'end_time' => 'nullable|date|after:start_time',
         ]);
 
         if ($validator->fails()) {
@@ -112,6 +99,10 @@ class QuestionPackageController extends Controller
     {
         $package = QuestionPackage::findOrFail($id);
         $package->delete();
-        return response()->json(['success' => true, 'message' => 'Paket soal berhasil dihapus']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Paket soal berhasil dihapus'
+        ]);
     }
 }

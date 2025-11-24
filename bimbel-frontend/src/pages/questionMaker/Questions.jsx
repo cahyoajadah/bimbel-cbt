@@ -1,5 +1,4 @@
-// src/pages/questionMaker/Questions.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, ArrowLeft, X, ListPlus } from 'lucide-react';
@@ -9,7 +8,6 @@ import { Button } from '../../components/common/Button';
 import { Table } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
-// Import useFieldArray untuk menangani opsi dinamis
 import { useForm, useFieldArray } from 'react-hook-form'; 
 import { useUIStore } from '../../store/uiStore';
 import toast from 'react-hot-toast';
@@ -22,7 +20,6 @@ export default function Questions() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
 
-  // --- FETCH DATA ---
   const { data: packageData } = useQuery({
     queryKey: ['question-package', packageId],
     queryFn: async () => {
@@ -41,18 +38,11 @@ export default function Questions() {
 
   const questions = questionsData?.questions || [];
 
-  // --- FORM SETUP ---
   const { 
-    register, 
-    control, 
-    handleSubmit, 
-    reset, 
-    watch, 
-    setValue, 
-    formState: { errors } 
+    register, control, handleSubmit, reset, watch, setValue, formState: { errors } 
   } = useForm({
     defaultValues: {
-      type: 'single', // Default tipe
+      type: 'single',
       question_text: '',
       duration_seconds: 60,
       point: 5,
@@ -66,20 +56,14 @@ export default function Questions() {
     },
   });
 
-  // Gunakan useFieldArray untuk manajemen array opsi yang dinamis
   const { fields, append, remove } = useFieldArray({
     control,
     name: "options"
   });
 
-  // Pantau perubahan nilai untuk logika tampilan
   const watchedType = watch('type');
   const watchedOptions = watch('options');
 
-  // --- HANDLERS ---
-
-  // Handler khusus untuk Radio Button (Pilihan Ganda Biasa)
-  // Karena Radio button di loop array agak tricky di React Hook Form
   const handleSingleCorrectChange = (index) => {
     const currentOptions = watchedOptions;
     const updated = currentOptions.map((opt, i) => ({
@@ -89,21 +73,20 @@ export default function Questions() {
     setValue('options', updated);
   };
 
-  // 1. Fix Create Mutation
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const payload = { ...data };
       
       if (payload.type === 'short') {
         payload.options = [{
-          option_text: data.short_answer_key, // Gunakan option_text
+          option_text: data.short_answer_key, 
           is_correct: true,
           weight: 0
         }];
       } else {
         payload.options = data.options.map((opt, idx) => ({
           ...opt,
-          option_text: opt.text, // <--- [PENTING] Mapping text ke option_text
+          option_text: opt.text, 
           label: String.fromCharCode(65 + idx)
         }));
       }
@@ -123,21 +106,20 @@ export default function Questions() {
     }
   });
 
-  // 2. Fix Update Mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       const payload = { ...data };
       
       if (payload.type === 'short') {
         payload.options = [{
-          option_text: data.short_answer_key, // Gunakan option_text
+          option_text: data.short_answer_key,
           is_correct: true,
           weight: 0
         }];
       } else {
         payload.options = data.options.map((opt, idx) => ({
           ...opt,
-          option_text: opt.text, // <--- [PENTING] Mapping text ke option_text
+          option_text: opt.text,
           label: String.fromCharCode(65 + idx)
         }));
       }
@@ -169,21 +151,18 @@ export default function Questions() {
     if (question) {
       setEditingQuestion(question);
       
-      // Persiapan data untuk form
       let formattedOptions = [];
       let shortAnswerKey = '';
 
       if (question.type === 'short') {
-        // Jika isian, ambil text dari opsi pertama yg benar
-        const correctOpt = question.answer_options?.find(o => o.is_correct);
-        shortAnswerKey = correctOpt ? correctOpt.option_text : '';
+        const correctOpt = question.options?.find(o => o.is_correct);
+        shortAnswerKey = correctOpt ? correctOpt.text : '';
       } else {
-        // Jika PG, mapping opsi biasa
-        formattedOptions = question.answer_options?.map(opt => ({
+        formattedOptions = question.options?.map(opt => ({
           id: opt.id,
-          label: opt.option_label,
-          text: opt.option_text,
-          is_correct: Boolean(opt.is_correct), // Pastikan boolean
+          label: opt.label,
+          text: opt.text,
+          is_correct: Boolean(opt.is_correct),
           weight: opt.weight || 0
         })) || [];
       }
@@ -193,9 +172,9 @@ export default function Questions() {
         question_text: question.question_text,
         duration_seconds: question.duration_seconds,
         point: question.point,
-        explanation: question.explanation || '',
+        explanation: question.discussion || '', // Gunakan 'discussion' dari mapping backend
         options: formattedOptions,
-        short_answer_key: shortAnswerKey // Field virtual untuk isian
+        short_answer_key: shortAnswerKey 
       });
     } else {
       setEditingQuestion(null);
@@ -203,6 +182,7 @@ export default function Questions() {
         type: 'single',
         duration_seconds: 60,
         point: 5,
+        explanation: '',
         options: [
             { label: 'A', text: '', is_correct: false, weight: 0 },
             { label: 'B', text: '', is_correct: false, weight: 0 },
@@ -215,7 +195,6 @@ export default function Questions() {
   };
 
   const onSubmit = (data) => {
-    // Validasi Manual sebelum submit
     if (data.type === 'single') {
         const correctCount = data.options.filter(opt => opt.is_correct).length;
         if (correctCount !== 1) return toast.error('Pilih tepat 1 jawaban benar untuk Pilihan Ganda');
@@ -227,7 +206,6 @@ export default function Questions() {
     }
 
     if (data.type === 'weighted') {
-        // Cek apakah ada bobot yang diisi
         const hasWeight = data.options.some(opt => opt.weight > 0);
         if (!hasWeight) return toast.error('Minimal satu opsi harus memiliki bobot nilai > 0');
     }
@@ -249,7 +227,6 @@ export default function Questions() {
     });
   };
 
-  // --- TABLE COLUMNS ---
   const columns = [
     { header: 'No.', accessor: 'order_number' },
     { 
@@ -273,8 +250,26 @@ export default function Questions() {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
-          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
+          {/* TOMBOL EDIT (DENGAN TEKS) */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            icon={Edit} 
+            onClick={() => handleOpenModal(row)}
+          >
+            Edit
+          </Button>
+          
+          {/* TOMBOL HAPUS (DENGAN TEKS) */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            icon={Trash2} 
+            onClick={() => handleDelete(row)} 
+            className="text-red-600 hover:bg-red-50"
+          >
+            Hapus
+          </Button>
         </div>
       ),
     },
@@ -282,7 +277,6 @@ export default function Questions() {
 
   return (
     <div className="space-y-6">
-      {/* Header Page */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button variant="ghost" icon={ArrowLeft} onClick={() => navigate('/question-maker/packages')}>
@@ -296,12 +290,10 @@ export default function Questions() {
         <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Soal Baru</Button>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-lg shadow">
         <Table columns={columns} data={questions} loading={isLoading} />
       </div>
 
-      {/* Modal Form */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -310,7 +302,6 @@ export default function Questions() {
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           
-          {/* Baris 1: Tipe Soal & Poin */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
             <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Soal</label>
@@ -336,7 +327,6 @@ export default function Questions() {
             />
           </div>
 
-          {/* Pertanyaan */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Teks Pertanyaan</label>
             <textarea
@@ -348,14 +338,12 @@ export default function Questions() {
             {errors.question_text && <p className="text-red-500 text-xs mt-1">{errors.question_text.message}</p>}
           </div>
 
-          {/* Area Opsi Jawaban - Kondisional berdasarkan Tipe */}
           <div className="border-t pt-4">
             <div className="flex justify-between items-center mb-3">
                 <label className="block text-sm font-bold text-gray-800">
                     {watchedType === 'short' ? 'Kunci Jawaban' : 'Opsi Jawaban'}
                 </label>
                 
-                {/* Tombol Tambah Opsi (Hanya jika bukan isian) */}
                 {watchedType !== 'short' && (
                     <Button 
                         type="button" 
@@ -369,7 +357,6 @@ export default function Questions() {
                 )}
             </div>
 
-            {/* UI KHUSUS: ISIAN SINGKAT */}
             {watchedType === 'short' && (
                 <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                     <p className="text-sm text-yellow-800 mb-2">Masukkan satu kata atau angka pasti sebagai kunci jawaban.</p>
@@ -380,17 +367,14 @@ export default function Questions() {
                 </div>
             )}
 
-            {/* UI KHUSUS: PILIHAN GANDA (Single/Multiple/Weighted) */}
             {watchedType !== 'short' && (
                 <div className="space-y-3">
                     {fields.map((item, index) => (
                         <div key={item.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-white transition-colors">
                             
-                            {/* Kolom Label (A, B, C...) */}
                             <div className="flex flex-col items-center gap-2 pt-2">
                                 <span className="font-bold text-gray-500 w-6 text-center">{String.fromCharCode(65 + index)}</span>
                                 
-                                {/* Kontrol Benar/Salah/Bobot */}
                                 {watchedType === 'single' && (
                                     <input 
                                         type="radio" 
@@ -411,7 +395,6 @@ export default function Questions() {
                                 )}
                             </div>
 
-                            {/* Kolom Teks Opsi */}
                             <div className="flex-1 space-y-2">
                                 <textarea
                                     rows={2}
@@ -420,7 +403,6 @@ export default function Questions() {
                                     {...register(`options.${index}.text`, { required: true })}
                                 />
                                 
-                                {/* Input Bobot (Hanya muncul jika tipe weighted) */}
                                 {watchedType === 'weighted' && (
                                     <div className="flex items-center gap-2">
                                         <label className="text-xs font-medium text-gray-600">Bobot Nilai:</label>
@@ -434,12 +416,11 @@ export default function Questions() {
                                 )}
                             </div>
 
-                            {/* Tombol Hapus */}
                             <button 
                                 type="button"
                                 onClick={() => remove(index)}
                                 className="text-gray-400 hover:text-red-500 p-1"
-                                disabled={fields.length <= 2} // Minimal 2 opsi
+                                disabled={fields.length <= 2}
                                 title="Hapus opsi ini"
                             >
                                 <X size={18} />
@@ -450,7 +431,6 @@ export default function Questions() {
             )}
           </div>
 
-          {/* Pembahasan */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Pembahasan / Penjelasan</label>
             <textarea
@@ -461,7 +441,6 @@ export default function Questions() {
             />
           </div>
 
-          {/* Footer Actions */}
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
             <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>

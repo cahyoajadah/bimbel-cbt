@@ -2,7 +2,6 @@
 // ============================================
 // app/Models/QuestionPackage.php
 // ============================================
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,37 +12,43 @@ class QuestionPackage extends Model
     use HasFactory;
 
     protected $fillable = [
-        'subject_id',
-        'created_by',
+        'program_id',
         'name',
         'description',
-        'class_level',
-        'program_type',
-        'is_active',
-        // [BARU] Tambahkan field waktu
-        'start_time',
-        'end_time',
+        'duration_minutes',
+        'passing_score',
+        'start_date', // [BARU]
+        'end_date',   // [BARU]
+        'is_active'
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        // [BARU] Auto-convert ke objek Carbon/DateTime
-        'start_time' => 'datetime',
-        'end_time' => 'datetime',
+        'start_date' => 'date', // Auto convert ke Carbon Date
+        'end_date' => 'date',
     ];
 
-    public function subject()
+    public function program()
     {
-        return $this->belongsTo(Subject::class);
-    }
-    
-    public function creator()
-    {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(Program::class);
     }
 
     public function questions()
     {
         return $this->hasMany(Question::class);
+    }
+
+    // Helper untuk cek apakah paket sedang aktif berdasarkan tanggal
+    public function isAvailable()
+    {
+        $now = now()->startOfDay();
+        
+        // Jika tanggal tidak diisi, dianggap selalu aktif
+        if (!$this->start_date && !$this->end_date) return true;
+
+        $start = $this->start_date ? $this->start_date->startOfDay() : $now;
+        $end = $this->end_date ? $this->end_date->endOfDay() : $now->addYears(100);
+
+        return $now->between($start, $end);
     }
 }

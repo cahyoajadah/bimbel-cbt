@@ -231,45 +231,44 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
+        // 1. Validasi (Hapus 'email' dari validasi karena tidak boleh diedit)
         $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|string|max:20',
-            'avatar' => 'sometimes|image|max:2048',
-            // Student fields
-            'address' => 'sometimes|string',
-            'school' => 'sometimes|string|max:255',
-            'parent_name' => 'sometimes|string|max:255',
-            'parent_phone' => 'sometimes|string|max:20',
+            'name' => 'required|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'avatar' => 'nullable|image|max:2048',
+            // Gunakan 'nullable' agar tidak error jika kosong
+            'password' => 'nullable|string|min:8|confirmed', 
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
-            ], 422);
+            return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // Update user data
-        $user->update($request->only(['name', 'phone']));
+        // 2. Update Data Dasar (Tanpa Email)
+        $user->name = $request->name;
+        $user->phone = $request->phone;
+        // $user->email = $request->email; <--- HAPUS BARIS INI (Email Read-only)
 
-        // Handle avatar upload
+        // 3. Update Password (Hanya jika diisi)
+        if ($request->filled('password')) {
+            $user->password = Hash::make($request->password);
+        }
+
+        // 4. Handle Avatar
         if ($request->hasFile('avatar')) {
+            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
+                Storage::disk('public')->delete($user->avatar);
+            }
             $path = $request->file('avatar')->store('avatars', 'public');
-            $user->update(['avatar' => $path]);
+            $user->avatar = $path;
         }
 
-        // Update student data if applicable
-        if ($user->isStudent() && $user->student) {
-            $user->student->update($request->only([
-                'address', 'school', 'parent_name', 'parent_phone'
-            ]));
-        }
+        $user->save();
 
         return response()->json([
             'success' => true,
             'message' => 'Profil berhasil diperbarui',
-            'data' => $user->fresh()->load('role', 'student')
+            'data' => $user
         ]);
     }
 
