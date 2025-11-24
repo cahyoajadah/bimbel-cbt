@@ -22,9 +22,7 @@ use App\Http\Controllers\Api\Student\ClassController;
 use App\Http\Controllers\Api\Student\CBTController;
 use App\Http\Controllers\Api\Public\LandingController;
 
-// ============================================
-// PUBLIC ROUTES (Landing Page)
-// ============================================
+// PUBLIC ROUTES
 Route::prefix('public')->group(function () {
     Route::get('programs', [LandingController::class, 'programs']);
     Route::get('testimonies', [LandingController::class, 'testimonies']);
@@ -32,13 +30,10 @@ Route::prefix('public')->group(function () {
     Route::get('faq', [LandingController::class, 'faq']);
 });
 
-// ============================================
 // AUTH ROUTES
-// ============================================
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login']);
-    
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);
         Route::post('refresh', [AuthController::class, 'refresh']);
@@ -47,42 +42,33 @@ Route::prefix('auth')->group(function () {
     });
 });
 
-// ============================================
 // ADMIN MANAJEMEN ROUTES
-// ============================================
 Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
     ->prefix('admin')
     ->group(function () {
-        
-        // Dashboard
         Route::get('dashboard', [AdminDashboard::class, 'index']);
         
-        // Packages (Paket Tryout)
-        Route::apiResource('packages', PackageController::class);
-        Route::post('packages/{id}/assign-students', [PackageController::class, 'assignToStudents']);
+        // Packages (Hapus resource Packages jika tidak dipakai di API lagi, tapi biarkan jika QuestionMaker pakai model yang sama,
+        // tapi instruksinya hapus dari admin management. Kita hapus routenya dari sini.)
+        // Route::apiResource('packages', PackageController::class); 
         
-        // Materials (Materi)
         Route::apiResource('materials', MaterialController::class);
-        Route::post('materials/{id}/assign-students', [MaterialController::class, 'assignToStudents']);
-        
-        // Schedules (Jadwal Tryout & Kelas)
         Route::apiResource('schedules', ScheduleController::class);
-
-        // Subject (Mata Pelajaran)
         Route::apiResource('subjects', AdminSubjectController::class);
         Route::apiResource('programs', ProgramController::class);
-        
-        // Teachers (Pembimbing)
         Route::apiResource('teachers', TeacherController::class);
         
-        // Students (Siswa)
+        // Students
         Route::apiResource('students', StudentController::class);
         Route::get('students/{id}/programs', [StudentController::class, 'getPrograms']);
         Route::post('students/{id}/programs', [StudentController::class, 'assignProgram']);
         Route::get('students/{id}/attendance', [StudentController::class, 'getAttendance']);
         Route::post('students/{id}/attendance', [StudentController::class, 'recordAttendance']);
         
-        // Feedback
+        // [BARU] Route Detail Progress untuk Monitoring
+        Route::get('students/{id}/progress-detail', [StudentController::class, 'progressDetail']);
+        
+        // Feedback (Endpoint untuk kirim feedback)
         Route::get('feedbacks', [FeedbackController::class, 'index']);
         Route::post('feedbacks', [FeedbackController::class, 'store']);
         Route::get('feedbacks/{id}', [FeedbackController::class, 'show']);
@@ -90,67 +76,45 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::delete('feedbacks/{id}', [FeedbackController::class, 'destroy']);
     });
 
-// ============================================
 // ADMIN PEMBUAT SOAL ROUTES
-// ============================================
 Route::middleware(['auth:sanctum', 'role:pembuat_soal'])
     ->prefix('question-maker')
     ->group(function () {
-        
-        // Question Packages
         Route::apiResource('packages', QuestionPackageController::class);
-        
-        // Questions
         Route::get('packages/{packageId}/questions', [QuestionController::class, 'index']);
         Route::post('packages/{packageId}/questions', [QuestionController::class, 'store']);
         Route::get('packages/{packageId}/questions/{id}', [QuestionController::class, 'show']);
         Route::put('packages/{packageId}/questions/{id}', [QuestionController::class, 'update']);
         Route::delete('packages/{packageId}/questions/{id}', [QuestionController::class, 'destroy']);
-        
-        // Question Reports (Pengaduan Soal)
         Route::get('reports', [QuestionReportController::class, 'index']);
         Route::post('reports/{id}/respond', [QuestionReportController::class, 'respond']);
     });
 
-// ============================================
 // STUDENT ROUTES
-// ============================================
 Route::middleware(['auth:sanctum', 'role:siswa'])
     ->prefix('student')
     ->group(function () {
-        
-        // Dashboard
         Route::get('dashboard', [StudentDashboardController::class, 'index']);
-        
-        // Subjects & Materials (Mata Pelajaran)
         Route::get('subjects', [StudentSubjectController::class, 'index']);
         Route::get('subjects/{id}', [StudentSubjectController::class, 'show']);
         Route::get('subjects/{id}/materials', [StudentSubjectController::class, 'getMaterials']);
         Route::post('materials/{id}/complete', [StudentSubjectController::class, 'completeMaterial']);
-        
-        // Classes (Kelas Live)
         Route::get('classes', [ClassController::class, 'index']);
         Route::get('classes/upcoming', [ClassController::class, 'upcoming']);
         Route::post('classes/{id}/join', [ClassController::class, 'join']);
-        
-        // Schedules (Jadwal Bimbel)
         Route::get('schedules', [ClassController::class, 'schedules']);
-        
-        // Progress & Feedback
         Route::get('progress', [StudentDashboardController::class, 'progress']);
+        
+        // [BARU] Feedback untuk Siswa
         Route::get('feedbacks', [StudentDashboardController::class, 'feedbacks']);
         
-        // CBT / Tryout
         Route::get('tryouts', [CBTController::class, 'availableTryouts']);
         Route::post('tryouts/{packageId}/start', [CBTController::class, 'startSession']);
-        //Route::get('tryout-results/{resultId}/review', [CBTController::class, 'reviewResult']);
         Route::get('tryout-results/{resultId}', [CBTController::class, 'reviewResult']);
         Route::post('questions/report', [CBTController::class, 'reportQuestion']);
     });
 
-// ============================================
-// CBT SESSION ROUTES (Requires CBT Session Token)
-// ============================================
+// CBT SESSION ROUTES
 Route::middleware(['auth:sanctum', 'role:siswa', 'cbt.session'])
     ->prefix('cbt')
     ->group(function () {
@@ -160,21 +124,12 @@ Route::middleware(['auth:sanctum', 'role:siswa', 'cbt.session'])
         Route::post('fullscreen-warning', [CBTController::class, 'fullscreenWarning']);
     });
 
-// ============================================
-// COMMON ROUTES (All authenticated users)
-// ============================================
+// COMMON ROUTES
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('programs', function () {
-        return response()->json([
-            'success' => true,
-            'data' => \App\Models\Program::where('is_active', true)->get()
-        ]);
+        return response()->json(['success' => true, 'data' => \App\Models\Program::where('is_active', true)->get()]);
     });
-    
     Route::get('subjects', function () {
-        return response()->json([
-            'success' => true,
-            'data' => \App\Models\Subject::with('program')->get()
-        ]);
+        return response()->json(['success' => true, 'data' => \App\Models\Subject::with('program')->get()]);
     });
 });

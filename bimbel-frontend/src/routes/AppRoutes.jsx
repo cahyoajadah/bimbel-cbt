@@ -10,32 +10,32 @@ import Login from '../pages/Login';
 import NotFound from '../pages/NotFound';
 
 // Admin Pages
-import AdminDashboard from '../pages/admin/Dashboard'; // to be created
-import AdminPackages from '../pages/admin/Packages';
+import AdminDashboard from '../pages/admin/Dashboard';
 import AdminSubjects from '../pages/admin/Subjects';
-import AdminMaterials from '../pages/admin/Materials'; // to be created
-import AdminSchedules from '../pages/admin/Schedules'; // to be created
-import AdminTeachers from '../pages/admin/Teachers'; // to be created
-import AdminStudents from '../pages/admin/Students'; // to be created
-import AdminFeedbacks from '../pages/admin/Feedbacks'; // to be created
+import AdminMaterials from '../pages/admin/Materials';
+import AdminSchedules from '../pages/admin/Schedules';
+import AdminTeachers from '../pages/admin/Teachers';
+import AdminStudents from '../pages/admin/Students';
+import AdminMonitoring from '../pages/admin/Monitoring'; // [RENAME LOGIC] File fisik tetap Feedbacks.jsx tapi isinya Monitoring
 
 // Question Maker Pages 
-import QuestionMakerDashboard from '../pages/questionMaker/Dashboard'; // to be created
-import QuestionPackages from '../pages/questionMaker/QuestionPackages'; // to be created
-import Questions from '../pages/questionMaker/Questions'; // to be created
-import QuestionReports from '../pages/questionMaker/Reports'; // to be created
+import QuestionMakerDashboard from '../pages/questionMaker/Dashboard';
+import QuestionPackages from '../pages/questionMaker/QuestionPackages';
+import Questions from '../pages/questionMaker/Questions';
+import QuestionReports from '../pages/questionMaker/Reports';
 
 // Student Pages  
-import StudentDashboard from '../pages/student/Dashboard'; // to be created
-import Subjects from '../pages/student/Subjects'; // to be created
-import SubjectMaterials from '../pages/student/SubjectMaterials'; // to be created
-import Classes from '../pages/student/Classes'; // to be created
-import Tryouts from '../pages/student/Tryouts'; // to be created
+import StudentDashboard from '../pages/student/Dashboard';
+import Subjects from '../pages/student/Subjects';
+import SubjectMaterials from '../pages/student/SubjectMaterials';
+import Classes from '../pages/student/Classes';
+import Tryouts from '../pages/student/Tryouts';
 import CBT from '../pages/student/CBT'; 
-import TryoutReview from '../pages/student/TryoutReview'; // to be created
-import Schedules from '../pages/student/Schedules'; // to be created
-import Progress from '../pages/student/Progress'; // to be created
-import Profile from '../pages/student/Profile'; // to be created
+import TryoutReview from '../pages/student/TryoutReview';
+import Schedules from '../pages/student/Schedules';
+import Progress from '../pages/student/Progress';
+import Profile from '../pages/student/Profile';
+import StudentFeedbacks from '../pages/student/Feedbacks'; // [BARU] Halaman Feedback Siswa
 
 // Layout
 import DashboardLayout from '../components/layout/DashboardLayout';
@@ -47,24 +47,18 @@ import { RoleBasedRoute } from './RoleBasedRoute';
 function AppRoutes() {
   const { isAuthenticated, user } = useAuthStore();
 
-  // Redirect authenticated users from landing/login
   const handleAuthRedirect = () => {
     if (!isAuthenticated) return null;
-
     const roleRedirects = {
       'admin_manajemen': '/admin/dashboard',
       'pembuat_soal': '/question-maker/dashboard',
       'siswa': '/student/dashboard',
     };
-
     return <Navigate to={roleRedirects[user?.role] || '/'} replace />;
   };
 
   return (
-    <BrowserRouter future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true, // Tambahkan ini juga untuk mencegah warning v7 lainnya
-      }}>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={isAuthenticated ? handleAuthRedirect() : <Landing />} />
@@ -79,13 +73,13 @@ function AppRoutes() {
                 <DashboardLayout role="admin">
                   <Routes>
                     <Route path="dashboard" element={<AdminDashboard />} />
-                    <Route path="packages" element={<AdminPackages />} />
+                    {/* Route Packages DIHAPUS */}
                     <Route path="subjects" element={<AdminSubjects />} />
                     <Route path="materials" element={<AdminMaterials />} />
                     <Route path="schedules" element={<AdminSchedules />} />
                     <Route path="teachers" element={<AdminTeachers />} />
                     <Route path="students" element={<AdminStudents />} />
-                    <Route path="feedbacks" element={<AdminFeedbacks />} />
+                    <Route path="feedbacks" element={<AdminMonitoring />} /> {/* Monitoring */}
                     <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
                   </Routes>
                 </DashboardLayout>
@@ -129,6 +123,7 @@ function AppRoutes() {
                     <Route path="tryouts" element={<Tryouts />} />
                     <Route path="schedules" element={<Schedules />} />
                     <Route path="progress" element={<Progress />} />
+                    <Route path="feedbacks" element={<StudentFeedbacks />} /> {/* [BARU] */}
                     <Route path="profile" element={<Profile />} />
                     <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
                   </Routes>
@@ -138,7 +133,7 @@ function AppRoutes() {
           }
         />
 
-        {/* CBT Route (Full screen, no layout) */}
+        {/* CBT Route */}
         <Route
           path="/student/cbt/:sessionId"
           element={
@@ -164,7 +159,6 @@ function AppRoutes() {
           }
         />
 
-        {/* 404 */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

@@ -26,7 +26,7 @@ export default function TryoutReview() {
   if (error || !reviewData) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
       <h2 className="text-xl font-bold text-gray-800 mb-2">Gagal memuat pembahasan</h2>
-      <Button onClick={() => navigate('/student/dashboard')}>Kembali ke Dashboard</Button>
+      <Button onClick={() => navigate('/student/Progress')}>Kembali ke Progress</Button>
     </div>
   );
 
@@ -138,8 +138,8 @@ export default function TryoutReview() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-6">
-            <Button variant="ghost" onClick={() => navigate('/student/dashboard')} className="text-gray-600 hover:text-gray-900">
-              <ArrowLeft className="w-5 h-5 mr-2" /> Kembali ke Dashboard
+            <Button variant="ghost" onClick={() => navigate('/student/progress')} className="text-gray-600 hover:text-gray-900">
+              <ArrowLeft className="w-5 h-5 mr-2" /> Kembali ke Progress
             </Button>
             <h1 className="text-xl font-bold text-gray-900">Review Hasil Ujian</h1>
           </div>

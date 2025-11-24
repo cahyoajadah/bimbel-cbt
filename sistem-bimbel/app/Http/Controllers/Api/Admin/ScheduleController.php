@@ -6,12 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Schedule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class ScheduleController extends Controller
 {
     public function index(Request $request)
     {
-        // [UPDATE] Tambahkan 'subject' ke dalam with()
         $query = Schedule::with(['program', 'subject', 'teacher.user', 'package']);
 
         if ($request->has('type')) {
@@ -22,7 +22,7 @@ class ScheduleController extends Controller
             $query->where('program_id', $request->program_id);
         }
         
-        // Gunakan start_time untuk urutan
+        // Urutkan dari yang terbaru (jadwal mendatang di atas)
         $schedules = $query->orderBy('start_time', 'desc')
             ->paginate($request->get('per_page', 15));
 
@@ -34,22 +34,26 @@ class ScheduleController extends Controller
 
     public function store(Request $request)
     {
+        // 1. Validasi menerima 'start_time' & 'end_time' (bukan date/time terpisah)
         $validator = Validator::make($request->all(), [
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'type' => 'required|in:tryout,class',
             'class_type' => 'required_if:type,class|in:zoom,offline',
-            'program_id' => 'nullable|exists:programs,id',
+            'program_id' => 'required|exists:programs,id',
             
-            // [BARU] Tambahkan validasi subject_id
-            'subject_id' => 'nullable|exists:subjects,id',
+            // Validasi subject & teacher: Wajib jika tipe = 'class', Boleh null jika 'tryout'
+            'subject_id' => 'required_if:type,class|nullable|exists:subjects,id',
+            'teacher_id' => 'required_if:type,class|nullable|exists:teachers,id',
             
-            'teacher_id' => 'nullable|exists:teachers,id',
             'package_id' => 'nullable|exists:packages,id',
+            
+            // Validasi Waktu (Datetime String: Y-m-d H:i:s)
             'start_time' => 'required|date',
             'end_time' => 'required|date|after:start_time',
-            'zoom_link' => 'required_if:class_type,zoom|nullable|url',
-            'location' => 'required_if:class_type,offline|nullable|string',
+            
+            'zoom_link' => 'nullable|url',
+            'location' => 'nullable|string',
             'max_participants' => 'nullable|integer|min:1',
             'is_active' => 'boolean',
         ]);
@@ -62,19 +66,40 @@ class ScheduleController extends Controller
             ], 422);
         }
 
-        $schedule = Schedule::create($request->all());
+        DB::beginTransaction();
+        try {
+            // 2. Logika pembersihan data
+            // Jika tryout, hapus subject/teacher agar tidak tersimpan
+            $data = $request->all();
+            
+            if ($request->type === 'tryout') {
+                $data['subject_id'] = null;
+                $data['teacher_id'] = null;
+                $data['class_type'] = null; // Tryout biasanya tidak punya tipe kelas (zoom/offline) spesifik di form ini, atau bisa disesuaikan
+            }
 
-        // [UPDATE] Load relasi subject
-        return response()->json([
-            'success' => true,
-            'message' => 'Jadwal berhasil dibuat',
-            'data' => $schedule->load(['program', 'subject', 'teacher.user', 'package'])
-        ], 201);
+            // 3. Simpan Data
+            $schedule = Schedule::create($data);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Jadwal berhasil dibuat',
+                'data' => $schedule->load(['program', 'subject', 'teacher.user', 'package'])
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal membuat jadwal: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function show($id)
     {
-        // [UPDATE] Load relasi subject
         $schedule = Schedule::with(['program', 'subject', 'teacher.user', 'package', 'participants'])
             ->findOrFail($id);
 
@@ -95,10 +120,9 @@ class ScheduleController extends Controller
             'class_type' => 'nullable|in:zoom,offline',
             'program_id' => 'nullable|exists:programs,id',
             
-            // [BARU] Tambahkan validasi subject_id
-            'subject_id' => 'nullable|exists:subjects,id',
-            
+            'subject_id' => 'nullable|exists:subjects,id', // Tidak strict required_if saat update (karena method PUT/PATCH)
             'teacher_id' => 'nullable|exists:teachers,id',
+            
             'package_id' => 'nullable|exists:packages,id',
             'start_time' => 'sometimes|date',
             'end_time' => 'sometimes|date|after:start_time',
@@ -116,14 +140,33 @@ class ScheduleController extends Controller
             ], 422);
         }
 
-        $schedule->update($request->all());
+        DB::beginTransaction();
+        try {
+            $data = $request->all();
 
-        // [UPDATE] Load relasi subject
-        return response()->json([
-            'success' => true,
-            'message' => 'Jadwal berhasil diperbarui',
-            'data' => $schedule->fresh()->load(['program', 'subject', 'teacher.user', 'package'])
-        ]);
+            // Logic null untuk tryout saat update
+            if ($request->has('type') && $request->type === 'tryout') {
+                $data['subject_id'] = null;
+                $data['teacher_id'] = null;
+            }
+
+            $schedule->update($data);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Jadwal berhasil diperbarui',
+                'data' => $schedule->fresh()->load(['program', 'subject', 'teacher.user', 'package'])
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal update jadwal: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function destroy($id)
