@@ -1,9 +1,8 @@
-// src/components/layout/Sidebar.jsx
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Book, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
-  Clock, TrendingUp, User, X, Menu
+  Clock, TrendingUp, User, X, Activity
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
@@ -11,13 +10,13 @@ import { useUIStore } from '../../store/uiStore';
 const menuItems = {
   admin: [
     { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/admin/packages', icon: Package, label: 'Paket Tryout' },
     { path: '/admin/subjects', icon: Book, label: 'Mata Pelajaran' },
     { path: '/admin/materials', icon: BookOpen, label: 'Materi' },
     { path: '/admin/schedules', icon: Calendar, label: 'Jadwal' },
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },
     { path: '/admin/students', icon: Users, label: 'Siswa' },
-    { path: '/admin/feedbacks', icon: MessageSquare, label: 'Feedback' },
+    // [UBAH] Path diperbarui menjadi '/admin/monitoring'
+    { path: '/admin/monitoring', icon: Activity, label: 'Monitoring' },
   ],
   'question-maker': [
     { path: '/question-maker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -31,6 +30,7 @@ const menuItems = {
     { path: '/student/tryouts', icon: FileText, label: 'Tryout' },
     { path: '/student/schedules', icon: Clock, label: 'Jadwal Bimbel' },
     { path: '/student/progress', icon: TrendingUp, label: 'Progres Belajar' },
+    { path: '/student/feedbacks', icon: MessageSquare, label: 'Feedback' },
     { path: '/student/profile', icon: User, label: 'Profil' },
   ],
 };

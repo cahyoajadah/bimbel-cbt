@@ -1,134 +1,180 @@
-// src/pages/admin/Dashboard.jsx
 import { useQuery } from '@tanstack/react-query';
-import { Users, BookOpen, Package, GraduationCap, TrendingUp } from 'lucide-react';
-import { adminService } from '../../api/services/adminService';
+import { Link } from 'react-router-dom';
+import { 
+  Users, GraduationCap, Book, BookOpen, Calendar, 
+  Activity, ArrowRight, Layout
+} from 'lucide-react';
+import api from '../../api/axiosConfig';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
-import clsx from 'clsx';
 
 export default function AdminDashboard() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin-dashboard'],
-    queryFn: adminService.getDashboard,
+  const { data: statsData, isLoading } = useQuery({
+    queryKey: ['admin-dashboard-stats'],
+    queryFn: async () => (await api.get('/admin/dashboard')).data,
   });
 
-  const stats = data?.data || {};
+  const stats = statsData?.data || {};
 
-  const statsCards = [
-    {
-      title: 'Total Siswa',
-      value: stats.total_siswa || 0,
-      icon: Users,
-      color: 'blue',
-      bgColor: 'bg-blue-100',
-      textColor: 'text-blue-600',
+  const statCards = [
+    { 
+      label: 'Total Siswa', 
+      value: stats.total_students || 0, 
+      icon: Users, 
+      color: 'text-blue-600', 
+      bg: 'bg-blue-50',
+      border: 'border-blue-100'
     },
-    {
-      title: 'Total Pembimbing',
-      value: stats.total_pembimbing || 0,
-      icon: GraduationCap,
-      color: 'green',
-      bgColor: 'bg-green-100',
-      textColor: 'text-green-600',
+    { 
+      label: 'Total Pembimbing', 
+      value: stats.total_teachers || 0, 
+      icon: GraduationCap, 
+      color: 'text-emerald-600', 
+      bg: 'bg-emerald-50',
+      border: 'border-emerald-100'
     },
-    {
-      title: 'Paket Tryout',
-      value: stats.total_paket_tryout || 0,
-      icon: Package,
-      color: 'purple',
-      bgColor: 'bg-purple-100',
-      textColor: 'text-purple-600',
+    { 
+      label: 'Mata Pelajaran', 
+      value: stats.total_subjects || 0, 
+      icon: Book, 
+      color: 'text-violet-600', 
+      bg: 'bg-violet-50',
+      border: 'border-violet-100'
     },
-    {
-      title: 'Total Materi',
-      value: stats.total_materi || 0,
-      icon: BookOpen,
-      color: 'yellow',
-      bgColor: 'bg-yellow-100',
-      textColor: 'text-yellow-600',
+    { 
+      label: 'Jadwal Aktif', 
+      value: stats.total_schedules || 0, 
+      icon: Calendar, 
+      color: 'text-pink-600', 
+      bg: 'bg-pink-50',
+      border: 'border-pink-100'
     },
   ];
 
-  if (isLoading) {
-    return <LoadingSpinner text="Memuat dashboard..." />;
-  }
+  const quickActions = [
+    {
+      title: 'Manajemen Siswa',
+      desc: 'Kelola data siswa, aktivasi akun, dan pembagian kelas.',
+      icon: Users,
+      path: '/admin/students',
+      color: 'blue'
+    },
+    {
+      title: 'Atur Jadwal',
+      desc: 'Buat dan atur jadwal bimbingan belajar mingguan.',
+      icon: Calendar,
+      path: '/admin/schedules',
+      color: 'pink'
+    },
+    {
+      title: 'Monitoring & Evaluasi',
+      desc: 'Pantau nilai tryout dan berikan feedback bulanan.',
+      icon: Activity,
+      path: '/admin/monitoring', // [UBAH] Path diperbarui
+      color: 'orange'
+    },
+    {
+      title: 'Manajemen Guru',
+      desc: 'Kelola data pengajar dan penugasan mata pelajaran.',
+      icon: GraduationCap,
+      path: '/admin/teachers',
+      color: 'emerald'
+    },
+    {
+      title: 'Bank Materi',
+      desc: 'Upload dan kelola materi pembelajaran digital.',
+      icon: BookOpen,
+      path: '/admin/materials',
+      color: 'amber'
+    },
+    {
+      title: 'Mata Pelajaran',
+      desc: 'Atur daftar mata pelajaran yang tersedia.',
+      icon: Layout,
+      path: '/admin/subjects',
+      color: 'violet'
+    }
+  ];
+
+  if (isLoading) return <LoadingSpinner />;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard Admin</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Selamat datang di panel administrasi National Academy Taruna Bangsa.
-        </p>
+    <div className="space-y-8">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dashboard Admin</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Ringkasan data akademik dan pusat kontrol manajemen.
+          </p>
+        </div>
+        <div className="text-sm font-medium text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 shadow-sm">
+           {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        </div>
       </div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsCards.map((stat) => {
-          const Icon = stat.icon;
+      
+      {/* STATS GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map((card, index) => {
+          const Icon = card.icon;
           return (
-            <div
-              key={stat.title}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">{stat.value}</p>
+            <div key={index} className={`bg-white p-5 rounded-xl shadow-sm border ${card.border} transition-all duration-200 hover:shadow-md`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-2 rounded-lg ${card.bg}`}>
+                  <Icon className={`w-6 h-6 ${card.color}`} />
                 </div>
-                <div className={clsx('w-12 h-12 rounded-lg flex items-center justify-center', stat.bgColor)}>
-                  <Icon className={clsx('w-6 h-6', stat.textColor)} />
-                </div>
+                <span className="text-2xl font-bold text-gray-900">{card.value}</span>
               </div>
+              <p className="text-sm font-medium text-gray-500">{card.label}</p>
             </div>
           );
         })}
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <a
-            href="/admin/students"
-            className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-          >
-            <Users className="w-8 h-8 text-blue-600 mb-2" />
-            <h3 className="font-medium text-gray-900">Kelola Siswa</h3>
-            <p className="text-sm text-gray-600 mt-1">Tambah, edit, atau hapus data siswa</p>
-          </a>
+      {/* QUICK ACTIONS */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Layout className="w-5 h-5 text-gray-500" />
+            Menu Manajemen Cepat
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {quickActions.map((action, index) => {
+                const Icon = action.icon;
+                const colorClasses = {
+                    blue: 'bg-blue-50 text-blue-600 group-hover:bg-blue-100',
+                    pink: 'bg-pink-50 text-pink-600 group-hover:bg-pink-100',
+                    orange: 'bg-orange-50 text-orange-600 group-hover:bg-orange-100',
+                    emerald: 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100',
+                    amber: 'bg-amber-50 text-amber-600 group-hover:bg-amber-100',
+                    violet: 'bg-violet-50 text-violet-600 group-hover:bg-violet-100',
+                };
 
-          <a
-            href="/admin/packages"
-            className="p-4 border-2 border-gray-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-colors"
-          >
-            <Package className="w-8 h-8 text-purple-600 mb-2" />
-            <h3 className="font-medium text-gray-900">Kelola Paket</h3>
-            <p className="text-sm text-gray-600 mt-1">Atur paket tryout dan pembelajaran</p>
-          </a>
+                return (
+                    <Link 
+                        key={index} 
+                        to={action.path}
+                        // [FIX] Layout: justify-between agar panah di ujung kanan
+                        className="group bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 flex items-start justify-between gap-4"
+                    >
+                        {/* Wrapper Konten Kiri (Icon + Teks) */}
+                        <div className="flex items-start gap-4 flex-1">
+                            <div className={`p-3 rounded-lg transition-colors shrink-0 ${colorClasses[action.color] || 'bg-gray-50 text-gray-600'}`}>
+                                <Icon size={24} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">
+                                    {action.title}
+                                </h3>
+                                <p className="text-sm text-gray-500 leading-relaxed">
+                                    {action.desc}
+                                </p>
+                            </div>
+                        </div>
 
-          <a
-            href="/admin/schedules"
-            className="p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors"
-          >
-            <TrendingUp className="w-8 h-8 text-green-600 mb-2" />
-            <h3 className="font-medium text-gray-900">Kelola Jadwal</h3>
-            <p className="text-sm text-gray-600 mt-1">Buat jadwal kelas dan tryout</p>
-          </a>
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Aktivitas Terbaru</h2>
-        <div className="space-y-4">
-          <div className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-            <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">Sistem berjalan normal</p>
-              <p className="text-xs text-gray-500">Semua service aktif</p>
-            </div>
-          </div>
+                        {/* Panah (Selalu di kanan) */}
+                        <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all shrink-0 mt-2" />
+                    </Link>
+                );
+            })}
         </div>
       </div>
     </div>

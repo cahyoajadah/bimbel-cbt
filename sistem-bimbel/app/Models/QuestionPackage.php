@@ -2,46 +2,48 @@
 // ============================================
 // app/Models/QuestionPackage.php
 // ============================================
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class QuestionPackage extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
-        'name', 'description', 'program_id', 'total_questions',
-        'duration_minutes', 'passing_score', 'is_active', 'created_by'
+        'subject_id',
+        'created_by',
+        'name',
+        'description',
+        'class_level',
+        'program_type',
+        'is_active',
+        // [BARU] Tambahkan field waktu
+        'start_time',
+        'end_time',
     ];
 
     protected $casts = [
-        'passing_score' => 'decimal:2',
         'is_active' => 'boolean',
+        // [BARU] Auto-convert ke objek Carbon/DateTime
+        'start_time' => 'datetime',
+        'end_time' => 'datetime',
     ];
 
-    public function program(): BelongsTo
+    public function subject()
     {
-        return $this->belongsTo(Program::class);
+        return $this->belongsTo(Subject::class);
     }
-
-    public function creator(): BelongsTo
+    
+    public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function questions(): HasMany
+    public function questions()
     {
-        return $this->hasMany(Question::class)->orderBy('order_number');
-    }
-
-    public function cbtSessions(): HasMany
-    {
-        return $this->hasMany(CbtSession::class);
-    }
-
-    public function results(): HasMany
-    {
-        return $this->hasMany(StudentTryoutResult::class);
+        return $this->hasMany(Question::class);
     }
 }

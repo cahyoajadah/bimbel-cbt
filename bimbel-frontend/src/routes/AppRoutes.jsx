@@ -16,7 +16,7 @@ import AdminMaterials from '../pages/admin/Materials';
 import AdminSchedules from '../pages/admin/Schedules';
 import AdminTeachers from '../pages/admin/Teachers';
 import AdminStudents from '../pages/admin/Students';
-import AdminMonitoring from '../pages/admin/Monitoring'; // [RENAME LOGIC] File fisik tetap Feedbacks.jsx tapi isinya Monitoring
+import AdminMonitoring from '../pages/admin/Monitoring'; // Pastikan file ini ada di src/pages/admin/Monitoring.jsx
 
 // Question Maker Pages 
 import QuestionMakerDashboard from '../pages/questionMaker/Dashboard';
@@ -35,7 +35,7 @@ import TryoutReview from '../pages/student/TryoutReview';
 import Schedules from '../pages/student/Schedules';
 import Progress from '../pages/student/Progress';
 import Profile from '../pages/student/Profile';
-import StudentFeedbacks from '../pages/student/Feedbacks'; // [BARU] Halaman Feedback Siswa
+import StudentFeedbacks from '../pages/student/Feedbacks';
 
 // Layout
 import DashboardLayout from '../components/layout/DashboardLayout';
@@ -79,7 +79,8 @@ function AppRoutes() {
                     <Route path="schedules" element={<AdminSchedules />} />
                     <Route path="teachers" element={<AdminTeachers />} />
                     <Route path="students" element={<AdminStudents />} />
-                    <Route path="feedbacks" element={<AdminMonitoring />} /> {/* Monitoring */}
+                    {/* [UPDATE] Path diubah menjadi 'monitoring' agar sesuai dengan Sidebar & Dashboard */}
+                    <Route path="monitoring" element={<AdminMonitoring />} /> 
                     <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
                   </Routes>
                 </DashboardLayout>
@@ -123,7 +124,7 @@ function AppRoutes() {
                     <Route path="tryouts" element={<Tryouts />} />
                     <Route path="schedules" element={<Schedules />} />
                     <Route path="progress" element={<Progress />} />
-                    <Route path="feedbacks" element={<StudentFeedbacks />} /> {/* [BARU] */}
+                    <Route path="feedbacks" element={<StudentFeedbacks />} />
                     <Route path="profile" element={<Profile />} />
                     <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
                   </Routes>

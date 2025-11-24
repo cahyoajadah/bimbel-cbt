@@ -1,8 +1,9 @@
 // ============================================
 // src/components/common/LoadingSpinner.jsx
 // ============================================
-import clsx from 'clsx'; // <--- TAMBAHKAN BARIS INI (PENTING!)
+import clsx from 'clsx';
 
+// 1. Named Export (untuk import { LoadingSpinner } from ...)
 export const LoadingSpinner = ({ size = 'md', text = '' }) => {
   const sizes = {
     sm: 'h-4 w-4',
@@ -17,3 +18,6 @@ export const LoadingSpinner = ({ size = 'md', text = '' }) => {
     </div>
   );
 };
+
+// 2. Default Export (untuk import LoadingSpinner from ...)
+export default LoadingSpinner;

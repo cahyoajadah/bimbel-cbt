@@ -11,14 +11,21 @@ return new class extends Migration
     {
         Schema::create('question_packages', function (Blueprint $table) {
             $table->id();
+            // Relasi ke Mata Pelajaran & Pembuat
+            $table->foreignId('subject_id')->constrained('subjects')->onDelete('cascade');
+            $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
+            
+            // Data Paket
             $table->string('name');
             $table->text('description')->nullable();
-            $table->foreignId('program_id')->constrained('programs')->onDelete('cascade');
-            $table->integer('total_questions')->default(0);
-            $table->integer('duration_minutes')->default(0);
-            $table->decimal('passing_score', 8, 2)->nullable();
+            $table->integer('class_level'); // 10, 11, 12
+            $table->enum('program_type', ['IPA', 'IPS', 'IPC']);
             $table->boolean('is_active')->default(true);
-            $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
+            
+            // [BARU] Menambahkan Rentang Waktu Aktif
+            $table->dateTime('start_time')->nullable(); 
+            $table->dateTime('end_time')->nullable();
+
             $table->timestamps();
         });
     }
