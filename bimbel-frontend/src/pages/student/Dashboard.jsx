@@ -1,24 +1,19 @@
-// ============================================
-// src/pages/student/Dashboard.jsx
-// ============================================
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
 import { 
-  BookOpen, FileText, TrendingUp, ArrowRight, Video, Award 
+  BookOpen, Clock, Calendar, TrendingUp, Video, ChevronRight, 
+  MapPin, Link as LinkIcon, AlertCircle 
 } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
-import { LoadingSpinner } from '../../components/common/LoadingSpinner';
-import { formatDateTime } from '../../utils/helpers';
-import { useAuthStore } from '../../store/authStore';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '../../components/common/Button';
 import clsx from 'clsx';
 
-export default function StudentDashboard() {
+export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const student = user?.student;
-
-  const { data, isLoading } = useQuery({
+  
+  // Fetch Dashboard Data
+  const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['student-dashboard'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.STUDENT_DASHBOARD);
@@ -26,170 +21,181 @@ export default function StudentDashboard() {
     },
   });
 
-  const dashboardData = data || {};
-
-  const statsCards = [
-    {
-      title: 'Skor Tryout Terakhir',
-      value: student?.last_tryout_score || 0,
-      icon: Award,
-      color: 'yellow',
-      bgColor: 'bg-yellow-100',
-      textColor: 'text-yellow-600',
-      path: '/student/progress'
-    },
-    {
-      title: 'Materi Selesai',
-      value: dashboardData.learning_progress?.completed_materials || 0,
-      total: dashboardData.learning_progress?.total_materials || 0,
-      icon: BookOpen,
-      color: 'blue',
-      bgColor: 'bg-blue-100',
-      textColor: 'text-blue-600',
-      path: '/student/progress'
-    },
-  ];
-
   if (isLoading) {
-    return <LoadingSpinner text="Memuat dashboard..." />;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
+
+  const { stats, upcoming_schedules, recent_tryouts } = dashboardData || {};
+
+  // Helper untuk format tanggal
+  const formatDate = (dateString) => {
+    const options = { weekday: 'long', day: 'numeric', month: 'long' };
+    return new Date(dateString).toLocaleDateString('id-ID', options);
+  };
+
+  const formatTime = (dateString) => {
+    return new Date(dateString).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Welcome Section */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Halo, {user?.name}!</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Selamat datang di portal pembelajaran Anda.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600">Selamat datang kembali! Siap untuk belajar hari ini?</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsCards.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.title}
-              className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => navigate(stat.path)}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-3xl font-bold text-gray-900 mt-2">
-                    {stat.value}
-                    {stat.total > 0 && <span className="text-xl font-normal text-gray-500">/{stat.total}</span>}
-                  </p>
-                </div>
-                <div className={clsx('w-12 h-12 rounded-lg flex items-center justify-center', stat.bgColor)}>
-                  <Icon className={clsx('w-6 h-6', stat.textColor)} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        
-        {/* Quick Link: Tryout */}
-        <div 
-          className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer border-t-4 border-blue-600"
-          onClick={() => navigate('/student/tryouts')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Mulai Tryout</p>
-              <p className="text-xl font-bold text-blue-600 mt-2 flex items-center">
-                Kerjakan Soal
-              </p>
-            </div>
-            <FileText className="w-8 h-8 text-blue-600" />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+            <BookOpen size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Materi Selesai</p>
+            <h3 className="text-2xl font-bold text-gray-900">{stats?.completed_materials || 0}</h3>
           </div>
         </div>
 
-        {/* Quick Link: Progress */}
-        <div 
-          className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer border-t-4 border-green-600"
-          onClick={() => navigate('/student/progress')}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Progres Belajar</p>
-              <p className="text-xl font-bold text-green-600 mt-2 flex items-center">
-                Analisis Belajar
-              </p>
-            </div>
-            <TrendingUp className="w-8 h-8 text-green-600" />
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="p-3 bg-green-50 text-green-600 rounded-lg">
+            <TrendingUp size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Rata-rata Tryout</p>
+            <h3 className="text-2xl font-bold text-gray-900">{stats?.average_score || 0}</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
+          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
+            <Clock size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Kehadiran</p>
+            <h3 className="text-2xl font-bold text-gray-900">{stats?.attendance_rate || 0}%</h3>
           </div>
         </div>
       </div>
 
-      {/* Latest Materials & Upcoming Classes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Latest Materials */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Materi Terbaru</h2>
-            <Link to="/student/subjects" className="text-sm text-blue-600 hover:text-blue-700 flex items-center">
-              Lihat Semua <ArrowRight className="w-4 h-4 ml-1" />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {dashboardData.latest_materials?.length > 0 ? (
-              dashboardData.latest_materials.map((material) => (
-                <Link
-                  key={material.id}
-                  // Assuming subject_id is available in the material data
-                  to={`/student/subjects/${material.subject_id}/materials`} 
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+        {/* [PERBAIKAN] JADWAL KEGIATAN (General) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    {/* Ganti Icon Video jadi Calendar */}
+                    <Calendar className="text-blue-600" /> 
+                    Jadwal Akan Datang
+                </h3>
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-blue-600 hover:bg-blue-50"
+                    // [PERBAIKAN] Arahkan ke Schedules (Jadwal Lengkap), bukan Classes (Live)
+                    onClick={() => navigate('/student/schedules')} 
                 >
-                  <div className="flex items-center space-x-3">
-                    <BookOpen className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                    <p className="text-sm font-medium text-gray-700 line-clamp-1">
-                      {material.title}
-                    </p>
-                  </div>
-                  <span className="text-xs text-gray-500 flex-shrink-0 capitalize">{material.type}</span>
-                </Link>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500">Tidak ada materi terbaru.</p>
-            )}
-          </div>
+                    Lihat Semua <ChevronRight size={16} />
+                </Button>
+            </div>
+
+            <div className="space-y-4 flex-1">
+                {upcoming_schedules?.length > 0 ? (
+                    upcoming_schedules.map((schedule) => (
+                        <div key={schedule.id} className="flex gap-4 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                            {/* Date Box */}
+                            <div className="flex flex-col items-center justify-center bg-blue-50 text-blue-700 rounded-lg w-16 h-16 flex-shrink-0">
+                                <span className="text-xs font-bold uppercase">{new Date(schedule.start_time).toLocaleDateString('id-ID', { month: 'short' })}</span>
+                                <span className="text-xl font-bold">{new Date(schedule.start_time).getDate()}</span>
+                            </div>
+                            
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                                <h4 className="font-bold text-gray-900 truncate">{schedule.title}</h4>
+                                <div className="text-sm text-gray-600 flex items-center gap-2 mt-1">
+                                    <Clock size={14} />
+                                    {formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                    {schedule.class_type === 'zoom' ? (
+                                        <span className="flex items-center gap-1 text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                                            <Video size={12} /> Online (Zoom)
+                                        </span>
+                                    ) : (
+                                        <span className="flex items-center gap-1 text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
+                                            <MapPin size={12} /> {schedule.location || 'Offline'}
+                                        </span>
+                                    )}
+                                    {schedule.type === 'tryout' && (
+                                        <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-semibold">Tryout</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 py-8">
+                        <Calendar size={48} className="mb-2 opacity-20" />
+                        <p className="text-sm">Belum ada jadwal dalam waktu dekat.</p>
+                    </div>
+                )}
+            </div>
         </div>
 
-        {/* Upcoming Classes */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Kelas Mendatang</h2>
-            <Link to="/student/classes" className="text-sm text-blue-600 hover:text-blue-700 flex items-center">
-              Lihat Semua <ArrowRight className="w-4 h-4 ml-1" />
-            </Link>
-          </div>
-          <div className="space-y-3">
-            {dashboardData.latest_classes?.length > 0 ? (
-              dashboardData.latest_classes.map((classItem) => (
-                <Link
-                  key={classItem.id}
-                  to="/student/classes"
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+        {/* Recent Tryouts */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                    <TrendingUp className="text-green-600" />
+                    Hasil Tryout Terakhir
+                </h3>
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-green-600 hover:bg-green-50"
+                    onClick={() => navigate('/student/progress')}
                 >
-                  <div className="flex items-center space-x-3">
-                    <Video className="w-5 h-5 text-red-500 flex-shrink-0" />
-                    <div>
-                        <p className="text-sm font-medium text-gray-700 line-clamp-1">{classItem.title}</p>
-                        <p className="text-xs text-gray-500">{classItem.program?.name || 'Kelas'}</p>
+                    Lihat Progress <ChevronRight size={16} />
+                </Button>
+            </div>
+
+            <div className="space-y-0 divide-y divide-gray-100 flex-1">
+                {recent_tryouts?.length > 0 ? (
+                    recent_tryouts.map((result) => (
+                        <div key={result.id} className="py-3 flex items-center justify-between group cursor-pointer" onClick={() => navigate(`/student/tryout-review/${result.id}`)}>
+                            <div>
+                                <p className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                                    {result.question_package?.name || 'Paket Soal'}
+                                </p>
+                                <p className="text-xs text-gray-500 flex items-center gap-1">
+                                    <Calendar size={12} /> {formatDate(result.created_at)}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <span className={clsx(
+                                    "text-lg font-bold",
+                                    result.total_score >= (result.question_package?.passing_score || 0) ? "text-green-600" : "text-red-600"
+                                )}>
+                                    {result.total_score}
+                                </span>
+                                <p className="text-[10px] text-gray-400">Nilai Akhir</p>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-400 py-8">
+                        <AlertCircle size={48} className="mb-2 opacity-20" />
+                        <p className="text-sm">Belum ada riwayat tryout.</p>
+                        <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/student/tryouts')}>
+                            Mulai Tryout
+                        </Button>
                     </div>
-                  </div>
-                  <span className="text-xs text-gray-500 flex-shrink-0">
-                    {formatDateTime(classItem.start_time)}
-                  </span>
-                </Link>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500">Tidak ada kelas mendatang.</p>
-            )}
-          </div>
+                )}
+            </div>
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ class ScheduleController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Schedule::with(['program', 'subject', 'teacher.user', 'package']);
+        $query = Schedule::with(['program', 'subject', 'teacher', 'package']);
 
         if ($request->has('type')) {
             $query->where('type', $request->type);
@@ -86,7 +86,7 @@ class ScheduleController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Jadwal berhasil dibuat',
-                'data' => $schedule->load(['program', 'subject', 'teacher.user', 'package'])
+                'data' => $schedule->load(['program', 'subject', 'teacher', 'package'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -100,7 +100,7 @@ class ScheduleController extends Controller
 
     public function show($id)
     {
-        $schedule = Schedule::with(['program', 'subject', 'teacher.user', 'package', 'participants'])
+        $schedule = Schedule::with(['program', 'subject', 'teacher', 'package', 'participants'])
             ->findOrFail($id);
 
         return response()->json([
@@ -157,7 +157,7 @@ class ScheduleController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Jadwal berhasil diperbarui',
-                'data' => $schedule->fresh()->load(['program', 'subject', 'teacher.user', 'package'])
+                'data' => $schedule->fresh()->load(['program', 'subject', 'teacher', 'package'])
             ]);
             
         } catch (\Exception $e) {

@@ -9,10 +9,16 @@ return new class extends Migration
     {
         Schema::create('teachers', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            // HAPUS: $table->foreignId('user_id')...
+            
+            // TAMBAH: Data diri langsung di sini
+            $table->string('name');
+            $table->string('email')->nullable(); // Email kontak saja, bukan login
+            $table->string('phone')->nullable();
+            
             $table->string('specialization')->nullable();
-            $table->text('bio')->nullable();
             $table->string('education')->nullable();
+            $table->text('bio')->nullable();
             $table->timestamps();
         });
     }

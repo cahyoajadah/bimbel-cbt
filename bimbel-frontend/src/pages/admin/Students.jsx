@@ -1,8 +1,8 @@
 // src/pages/admin/Students.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
-import { adminService } from '../../api/services/adminService';
+import { Plus, Edit, Trash2, Search, User, Mail, Phone, GraduationCap, MapPin, BookOpen } from 'lucide-react';
+import api from '../../api/axiosConfig';
 import { Button } from '../../components/common/Button';
 import { Table, Pagination } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
@@ -10,95 +10,120 @@ import { Input } from '../../components/common/Input';
 import { useForm } from 'react-hook-form';
 import { useUIStore } from '../../store/uiStore';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 
-export default function AdminStudents() {
+export default function Students() {
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
-  const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
 
-  // 1. Fetch Data Students
-  const { data, isLoading } = useQuery({
+  // --- FETCH DATA ---
+  const { data: studentsData, isLoading } = useQuery({
     queryKey: ['admin-students', currentPage, search],
-    queryFn: () => adminService.getStudents({ page: currentPage, search }),
+    queryFn: async () => {
+      const res = await api.get(`/admin/students?page=${currentPage}&per_page=15&search=${search}`);
+      return res.data.data;
+    },
   });
 
-  // 2. Fetch Data Programs (Untuk Dropdown)
+  const students = studentsData?.data || [];
+  const pagination = studentsData;
+
+  // Fetch Programs untuk Dropdown
   const { data: programsData } = useQuery({
     queryKey: ['admin-programs-list'],
-    queryFn: () => adminService.getPrograms(), 
+    queryFn: async () => (await api.get('/admin/programs')).data,
   });
-
-  const students = data?.data?.data || [];
-  const pagination = data?.data || {};
   const programs = programsData?.data || [];
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
 
-  // Mutations
+  // --- MUTATIONS ---
   const createMutation = useMutation({
-    mutationFn: adminService.createStudent,
+    mutationFn: async (data) => {
+      const res = await api.post('/admin/students', data);
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-students']);
       handleCloseModal();
       toast.success('Siswa berhasil ditambahkan');
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal menyimpan'),
+    onError: (err) => {
+        const msg = err.response?.data?.errors 
+            ? Object.values(err.response.data.errors)[0][0] 
+            : err.response?.data?.message || 'Gagal menyimpan';
+        toast.error(msg);
+    },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => adminService.updateStudent(id, data),
+    mutationFn: async ({ id, data }) => {
+      const res = await api.put(`/admin/students/${id}`, data);
+      return res.data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-students']);
       handleCloseModal();
       toast.success('Data siswa diperbarui');
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Gagal update'),
+    onError: (err) => {
+        const msg = err.response?.data?.errors 
+            ? Object.values(err.response.data.errors)[0][0] 
+            : err.response?.data?.message || 'Gagal update';
+        toast.error(msg);
+    },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: adminService.deleteStudent,
+    mutationFn: async (id) => {
+      await api.delete(`/admin/students/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['admin-students']);
       toast.success('Siswa dihapus');
     },
   });
 
-  // Handlers
+  // --- HANDLERS ---
   const handleOpenModal = (student = null) => {
     if (student) {
       setEditingStudent(student);
-      // Isi form dengan data siswa yang diedit
+      
+      // 1. Data Akun (User)
       setValue('name', student.user?.name);
       setValue('email', student.user?.email);
-      setValue('phone', student.user?.phone); // HP Siswa
+      setValue('phone', student.user?.phone);
       
+      // 2. Data Pribadi (Student)
+      setValue('student_number', student.student_number); 
       setValue('school', student.school);
-      setValue('birth_date', student.birth_date); 
-      setValue('parent_name', student.parent_name); 
-      setValue('parent_phone', student.parent_phone); 
+      setValue('address', student.address);
       
-      // Ambil program pertama yang dimiliki siswa (jika ada)
-      if (student.programs && student.programs.length > 0) {
-          setValue('program_id', student.programs[0].id);
-      } else {
-          setValue('program_id', '');
-      }
+      // Format Tanggal (YYYY-MM-DD)
+      const birthDate = student.birth_date ? student.birth_date.split('T')[0] : '';
+      setValue('birth_date', birthDate);
+      
+      setValue('parent_name', student.parent_name);
+      setValue('parent_phone', student.parent_phone);
+
+      // 3. Program (Ambil ID program pertama)
+      const firstProgramId = student.programs?.[0]?.id || '';
+      setValue('program_id', firstProgramId);
+
+      // Password kosong saat edit
+      setValue('password', '');
     } else {
-      // Reset form untuk siswa baru
       setEditingStudent(null);
-      reset({
-        name: '', 
-        email: '', 
-        password: '', 
-        phone: '',
-        school: '', 
-        birth_date: '',
-        parent_name: '',
-        parent_phone: '',
-        program_id: ''
+      // Reset form bersih
+      reset({ 
+          program_id: '', 
+          name: '', email: '', password: '', phone: '',
+          student_number: '', school: '', address: '',
+          birth_date: '', parent_name: '', parent_phone: ''
       });
     }
     setIsModalOpen(true);
@@ -110,57 +135,100 @@ export default function AdminStudents() {
     reset();
   };
 
-  // --- PERBAIKAN UTAMA DI SINI (onSubmit) ---
   const onSubmit = (data) => {
-    if (editingStudent) {
-      // Clone data agar tidak mengubah object asli
-      const payload = { ...data };
-      
-      // Hapus password dari payload jika kosong (agar tidak kena validasi min:8 di backend)
-      if (!payload.password) {
-        delete payload.password;
-      }
+    // Format payload
+    const payload = {
+        ...data,
+        // Backend butuh array program_ids
+        program_ids: data.program_id ? [parseInt(data.program_id)] : []
+    };
+    
+    // Hapus field helper program_id agar tidak dikirim
+    delete payload.program_id;
 
+    // Hapus password jika kosong saat edit
+    if (editingStudent && (!data.password || data.password.trim() === '')) {
+        delete payload.password;
+    }
+
+    if (editingStudent) {
       updateMutation.mutate({ id: editingStudent.id, data: payload });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(payload);
     }
   };
 
+  const handleDelete = (student) => {
+    showConfirm({
+      title: 'Hapus Siswa',
+      message: `Yakin hapus data siswa ${student.user?.name}?`,
+      type: 'danger',
+      confirmText: 'Hapus',
+      onConfirm: () => deleteMutation.mutate(student.id),
+    });
+  };
+
+  // --- TABEL ---
   const columns = [
     { 
-      header: 'Nama Siswa', 
+      header: 'Siswa', 
       render: (row) => (
-        <div>
-            <div className="font-medium text-gray-900">{row.user?.name}</div>
-            <div className="text-xs text-gray-500">{row.student_number}</div>
+        <div className="flex items-center gap-3">
+             <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">
+                {row.user?.name?.charAt(0).toUpperCase() || 'S'}
+            </div>
+            <div>
+                <div className="font-medium text-gray-900">{row.user?.name}</div>
+                <div className="text-xs text-gray-500 font-mono">{row.student_number}</div>
+            </div>
         </div>
       )
     },
-    { header: 'Email', render: (row) => row.user?.email },
+    { header: 'Asal Sekolah', accessor: 'school', render: (row) => <span className="text-sm">{row.school || '-'}</span> },
+    {
+      header: 'Orang Tua',
+      render: (row) => (
+        <div className="text-xs text-gray-600">
+            <div className="font-medium">{row.parent_name || '-'}</div>
+            <div className="text-gray-400">{row.parent_phone}</div>
+        </div>
+      )
+    },
     { 
         header: 'Program', 
-        render: (row) => (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                {row.programs?.[0]?.name || '-'}
-            </span>
-        )
+        render: (row) => {
+            const programName = row.programs?.[0]?.name;
+            return programName ? (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                    {programName}
+                </span>
+            ) : <span className="text-gray-400 text-xs italic">-</span>;
+        }
     },
-    { header: 'Asal Sekolah', accessor: 'school' },
     {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>Edit</Button>
-          <Button size="sm" variant="ghost" icon={Trash2} 
-            onClick={() => showConfirm({
-                title: 'Hapus Siswa',
-                message: 'Yakin hapus data siswa ini? Akun pengguna juga akan dihapus.',
-                type: 'danger',
-                confirmText: 'Hapus',
-                onConfirm: () => deleteMutation.mutate(row.id)
-            })} 
-            className="text-red-600 hover:bg-red-50">Hapus</Button>
+          {/* TOMBOL EDIT DENGAN TEXT */}
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            icon={Edit} 
+            onClick={() => handleOpenModal(row)}
+          >
+            Edit
+          </Button>
+          
+          {/* TOMBOL HAPUS DENGAN TEXT */}
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={Trash2}
+            onClick={() => handleDelete(row)}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          >
+            Hapus
+          </Button>
         </div>
       ),
     },
@@ -176,101 +244,160 @@ export default function AdminStudents() {
         <Button icon={Plus} onClick={() => handleOpenModal()}>Tambah Siswa</Button>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center space-x-2 bg-white p-4 rounded-lg shadow-sm">
+      <div className="flex items-center space-x-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 max-w-md">
         <Search className="w-5 h-5 text-gray-400" />
         <input 
             type="text" 
-            placeholder="Cari nama, email, atau nama ortu..." 
-            className="flex-1 border-none focus:ring-0 text-sm"
+            placeholder="Cari nama, NIS, atau sekolah..." 
+            className="flex-1 border-none focus:ring-0 text-sm outline-none"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow overflow-hidden">
         <Table columns={columns} data={students} loading={isLoading} />
-        <Pagination
+        {pagination && (
+          <Pagination
             currentPage={pagination.current_page || 1}
             totalPages={pagination.last_page || 1}
             onPageChange={setCurrentPage}
             perPage={pagination.per_page || 15}
             total={pagination.total || 0}
-        />
+          />
+        )}
       </div>
 
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingStudent ? 'Edit Siswa' : 'Tambah Siswa Baru'}
+        title={editingStudent ? 'Edit Data Siswa' : 'Registrasi Siswa Baru'}
+        size="lg"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           
-          {/* --- DATA AKUN --- */}
-          <div className="bg-gray-50 p-3 rounded-lg mb-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Data Akun</h3>
-            <div className="space-y-3">
-              <Input label="Nama Lengkap Siswa" required {...register('name', { required: 'Wajib diisi' })} />
-              <Input label="Email" type="email" required {...register('email', { required: 'Wajib diisi' })} />
-              <Input label="No. HP Siswa (Opsional)" {...register('phone')} />
-              
-              {/* Password Field: Wajib untuk user baru, Opsional untuk edit */}
-              {!editingStudent ? (
+          {/* Section 1: Akun Login */}
+          <div className="space-y-4 border-b pb-4">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                <User size={16}/> 1. Informasi Akun
+            </h3>
+            
+            <Input 
+                label="Nama Lengkap" 
+                placeholder="Nama Siswa" 
+                {...register('name', { required: 'Nama wajib diisi' })} 
+                error={errors.name?.message} 
+            />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <Input 
-                  label="Password" 
-                  type="password" 
-                  required 
-                  {...register('password', { required: 'Wajib diisi', minLength: { value: 8, message: 'Min 8 karakter' } })} 
-                  error={errors.password?.message} 
+                    label="Email (Username)" 
+                    type="email" 
+                    placeholder="email@contoh.com" 
+                    {...register('email', { required: 'Email wajib diisi' })} 
+                    error={errors.email?.message} 
                 />
-              ) : (
                 <Input 
-                  label="Password Baru (Kosongkan jika tidak ingin mengubah)" 
-                  type="password" 
-                  {...register('password', { minLength: { value: 8, message: 'Min 8 karakter' } })} 
-                  error={errors.password?.message} 
+                    label="Nomor HP Siswa" 
+                    type="tel" 
+                    placeholder="08..." 
+                    {...register('phone', { required: 'No HP wajib diisi' })} 
+                    error={errors.phone?.message}
                 />
-              )}
+            </div>
+            
+            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+               <Input 
+                label={editingStudent ? "Ganti Password (Opsional)" : "Password"} 
+                type="password" 
+                placeholder={editingStudent ? "Kosongkan jika tidak diubah" : "Min. 8 karakter"}
+                {...register('password', { required: !editingStudent, minLength: { value: 8, message: 'Min 8 karakter' } })} 
+                error={errors.password?.message} 
+               />
+               {!editingStudent && <p className="text-xs text-blue-600 mt-1">Password default bisa menggunakan NIS.</p>}
             </div>
           </div>
 
-          {/* --- DATA PROGRAM --- */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                Program Belajar <span className="text-red-500">*</span>
-            </label>
-            <select
-                className="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+          {/* Section 2: Data Sekolah & Pribadi */}
+          <div className="space-y-4 border-b pb-4">
+            <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                <GraduationCap size={16}/> 2. Data Sekolah & Pribadi
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-3">
+                 <Input 
+                    label="Nomor Induk (NIS)" 
+                    placeholder="Nomor Induk" 
+                    {...register('student_number', { required: 'NIS wajib diisi' })} 
+                    error={errors.student_number?.message} 
+                 />
+                 <Input 
+                    label="Asal Sekolah" 
+                    placeholder="Nama Sekolah" 
+                    {...register('school', { required: 'Asal Sekolah wajib diisi' })} 
+                    error={errors.school?.message} 
+                 />
+            </div>
+            
+            <div className="grid grid-cols-1 gap-3">
+                 <Input 
+                    label="Tanggal Lahir" 
+                    type="date" 
+                    {...register('birth_date', { required: 'Tanggal Lahir wajib diisi' })} 
+                    error={errors.birth_date?.message} 
+                 />
+                 <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <Input 
+                        label="Nama Orang Tua" 
+                        {...register('parent_name', { required: 'Nama Ortu wajib diisi' })} 
+                        error={errors.parent_name?.message} 
+                        className="bg-white"
+                    />
+                    <Input 
+                        label="No. HP Orang Tua" 
+                        {...register('parent_phone', { required: 'HP Ortu wajib diisi' })} 
+                        error={errors.parent_phone?.message} 
+                        className="bg-white"
+                    />
+                 </div>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Alamat Domisili</label>
+                <textarea 
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm" 
+                    rows="2"
+                    placeholder="Alamat lengkap siswa..."
+                    {...register('address', { required: 'Alamat wajib diisi' })}
+                ></textarea>
+                {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address.message}</p>}
+            </div>
+          </div>
+
+          {/* Section 3: Program */}
+          <div className="space-y-3">
+             <label className="block text-sm font-bold text-gray-800 flex items-center gap-2">
+                <BookOpen size={16} /> 3. Program Bimbel
+             </label>
+             <select
+                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
                 {...register('program_id', { required: 'Program wajib dipilih' })}
             >
                 <option value="">-- Pilih Program --</option>
-                {programs.map((prog) => (
+                {programs.length > 0 ? programs.map((prog) => (
                     <option key={prog.id} value={prog.id}>{prog.name}</option>
-                ))}
+                )) : <option disabled>Tidak ada program tersedia</option>}
             </select>
             {errors.program_id && <p className="text-red-500 text-xs mt-1">{errors.program_id.message}</p>}
           </div>
 
-          {/* --- DATA PRIBADI & ORTU --- */}
-          <div className="bg-gray-50 p-3 rounded-lg mt-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Data Pribadi & Orang Tua</h3>
-            <div className="space-y-3">
-              <Input label="Asal Sekolah" {...register('school')} />
-              <Input label="Tanggal Lahir" type="date" {...register('birth_date')} />
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Input label="Nama Orang Tua" {...register('parent_name')} />
-                <Input label="No. HP Orang Tua" {...register('parent_phone')} />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end space-x-2 pt-4">
+          <div className="flex justify-end space-x-2 pt-2 mt-4">
             <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
             <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
-              {editingStudent ? 'Perbarui' : 'Simpan'}
+              {editingStudent ? 'Perbarui Data' : 'Simpan Siswa'}
             </Button>
           </div>
+
         </form>
       </Modal>
     </div>

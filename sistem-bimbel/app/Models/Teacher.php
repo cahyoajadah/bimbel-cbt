@@ -11,7 +11,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Teacher extends Model
 {
     protected $fillable = [
-        'user_id', 'specialization', 'bio', 'education'
+        'name', 
+        'email', 
+        'phone',
+        'specialization', 
+        'education', 
+        'bio'
     ];
 
     public function user(): BelongsTo

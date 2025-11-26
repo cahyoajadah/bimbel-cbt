@@ -237,7 +237,7 @@ export default function AdminSchedules() {
             <div className="flex items-center gap-2">
                 <User size={14} className="text-gray-400" />
                 <span className="text-sm">
-                    {row.type === 'tryout' ? '-' : (row.teacher?.user?.name || '-')}
+                    {row.type === 'tryout' ? '-' : (row.teacher?.name || '-')}
                 </span>
             </div>
         )
@@ -346,7 +346,7 @@ export default function AdminSchedules() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pengajar</label>
                     <select className="w-full border-gray-300 rounded-lg shadow-sm p-2 border" {...register('teacher_id', { required: 'Pengajar wajib diisi' })}>
                         <option value="">-- Pilih Pengajar --</option>
-                        {allTeachersList?.map(t => <option key={t.id} value={t.id}>{t.user?.name || t.id}</option>)}
+                        {allTeachersList?.map(t => <option key={t.id} value={t.id}>{t.name || t.id}</option>)}
                     </select>
                     {errors.teacher_id && <span className="text-xs text-red-500">{errors.teacher_id.message}</span>}
                 </div>

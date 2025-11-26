@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
-use App\Models\Program;
 use App\Models\User;
+use App\Models\Role;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class StudentController extends Controller
 {
@@ -17,15 +17,19 @@ class StudentController extends Controller
     {
         $query = Student::with(['user', 'programs']);
 
-        if ($request->has('search') && $request->search != '') {
-            $search = $request->search;
-            $query->whereHas('user', function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            })->orWhere('student_number', 'like', "%{$search}%");
+        if ($request->has('search')) {
+            $searchTerm = $request->search;
+            $query->whereHas('user', function($q) use ($searchTerm) {
+                $q->where('name', 'like', "%{$searchTerm}%")
+                  ->orWhere('email', 'like', "%{$searchTerm}%");
+            })->orWhere('school', 'like', "%{$searchTerm}%")
+              ->orWhere('student_number', 'like', "%{$searchTerm}%");
         }
 
-        $students = $query->latest()->paginate($request->get('per_page', 15));
+        $students = $query->join('users', 'students.user_id', '=', 'users.id')
+                          ->select('students.*') 
+                          ->orderBy('users.name', 'asc')
+                          ->paginate($request->get('per_page', 15));
 
         return response()->json([
             'success' => true,
@@ -33,11 +37,159 @@ class StudentController extends Controller
         ]);
     }
 
-    // [BARU] Endpoint untuk Detail Progress (Dipanggil Modal Monitoring)
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:8',
+            'phone' => 'required|string|max:20',
+            
+            'student_number' => 'required|string|max:50|unique:students,student_number',
+            'school' => 'required|string|max:255',
+            'address' => 'required|string',
+            'birth_date' => 'required|date',
+            'parent_name' => 'required|string|max:255',
+            'parent_phone' => 'required|string|max:20',
+            
+            'program_ids' => 'nullable|array',
+            'program_ids.*' => 'exists:programs,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $role = Role::where('name', 'siswa')->firstOrFail();
+            
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'phone' => $request->phone,
+                'role_id' => $role->id,
+                'is_active' => true,
+            ]);
+
+            $student = Student::create([
+                'user_id' => $user->id,
+                'student_number' => $request->student_number,
+                'school' => $request->school,
+                'address' => $request->address,
+                'birth_date' => $request->birth_date,
+                'parent_name' => $request->parent_name,
+                'parent_phone' => $request->parent_phone,
+            ]);
+
+            // [PERBAIKAN] Tambahkan start_date otomatis
+            if ($request->has('program_ids')) {
+                $syncData = [];
+                foreach ($request->program_ids as $programId) {
+                    $syncData[$programId] = ['start_date' => now()];
+                }
+                $student->programs()->sync($syncData);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Siswa berhasil ditambahkan',
+                'data' => $student->load('user', 'programs')
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        $student = Student::findOrFail($id);
+        $user = $student->user;
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'phone' => 'required|string|max:20',
+            'password' => 'nullable|string|min:8',
+            
+            'student_number' => 'required|string|max:50|unique:students,student_number,' . $student->id,
+            'school' => 'required|string|max:255',
+            'address' => 'required|string',
+            'birth_date' => 'required|date',
+            'parent_name' => 'required|string|max:255',
+            'parent_phone' => 'required|string|max:20',
+            
+            'program_ids' => 'nullable|array',
+            'program_ids.*' => 'exists:programs,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            $userData = [
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+            ];
+            if ($request->filled('password')) {
+                $userData['password'] = Hash::make($request->password);
+            }
+            $user->update($userData);
+
+            $student->update([
+                'student_number' => $request->student_number,
+                'school' => $request->school,
+                'address' => $request->address,
+                'birth_date' => $request->birth_date,
+                'parent_name' => $request->parent_name,
+                'parent_phone' => $request->parent_phone,
+            ]);
+
+            // [PERBAIKAN] Tambahkan start_date otomatis saat update
+            if ($request->has('program_ids')) {
+                $syncData = [];
+                foreach ($request->program_ids as $programId) {
+                    // Kita set start_date ke hari ini untuk program baru/edit
+                    // (Jika ingin mempertahankan tanggal lama untuk program yg tidak berubah, logikanya lebih kompleks,
+                    //  tapi untuk Admin Panel sederhana, reset ke NOW() biasanya aman atau gunakan syncWithoutDetaching)
+                    $syncData[$programId] = ['start_date' => now()];
+                }
+                $student->programs()->sync($syncData);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data siswa berhasil diperbarui',
+                'data' => $student->load('user', 'programs')
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    public function destroy($id)
+    {
+        $student = Student::findOrFail($id);
+        $student->user->delete(); 
+        return response()->json(['success' => true, 'message' => 'Siswa berhasil dihapus']);
+    }
+
+    // Method monitoring progress (biarkan tetap ada)
     public function progressDetail($id) {
         $student = Student::with(['user', 'tryoutResults.package'])->findOrFail($id);
         
-        // Hitung statistik sederhana
         $attendanceCount = $student->attendances()->where('status', 'present')->count();
         $completedMaterials = $student->materials()->wherePivot('is_completed', true)->count();
         
@@ -47,7 +199,7 @@ class StudentController extends Controller
             ->get()
             ->map(function($res) {
                 return [
-                    'package_name' => $res->package->name,
+                    'package_name' => $res->package->name ?? 'Paket dihapus',
                     'date' => $res->created_at->format('d M Y'),
                     'total_score' => $res->total_score
                 ];
@@ -60,31 +212,9 @@ class StudentController extends Controller
             'data' => [
                 'attendance_count' => $attendanceCount,
                 'completed_materials' => $completedMaterials,
-                'average_score' => round($avgScore, 2),
+                'average_score' => round($avgScore ?? 0, 2),
                 'recent_tryouts' => $recentTryouts
             ]
         ]);
     }
-
-    // ... (Method store, show, update, destroy, getPrograms, assignProgram, recordAttendance - TETAPKAN SEPERTI SEMULA)
-    // Saya menyertakan method store/update/destroy dasar untuk menjaga file valid
-    
-    public function store(Request $request)
-    {
-        // ... (Logika store sebelumnya)
-        // Agar aman, saya asumsikan Anda memiliki backup method store/update di file sebelumnya
-        // Jika butuh kode lengkap store/update lagi beritahu saya. 
-        // Fokus perubahan kali ini ada di penambahan method progressDetail.
-        
-        // Placeholder untuk menjaga struktur
-        return response()->json(['message' => 'Implementasi store ada di file asli'], 200);
-    }
-    
-    public function show($id) { return response()->json(['data' => Student::with('user')->find($id)]); }
-    public function update(Request $request, $id) { return response()->json(['message' => 'Updated']); }
-    public function destroy($id) { return response()->json(['message' => 'Deleted']); }
-    public function getPrograms($id) { return response()->json(['data' => []]); }
-    public function assignProgram(Request $request, $id) { return response()->json(['message' => 'Assigned']); }
-    public function getAttendance($id) { return response()->json(['data' => []]); }
-    public function recordAttendance(Request $request, $id) { return response()->json(['message' => 'Recorded']); }
 }
