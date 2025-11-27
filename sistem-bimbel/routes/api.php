@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Admin\ScheduleController;
 use App\Http\Controllers\Api\Admin\TeacherController;
 use App\Http\Controllers\Api\Admin\StudentController;
 use App\Http\Controllers\Api\Admin\FeedbackController;
+use App\Http\Controllers\Api\Admin\AnnouncementController as AdminAnnouncement;
 use App\Http\Controllers\Api\QuestionMaker\QuestionPackageController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionReportController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\Api\Student\StudentDashboardController;
 use App\Http\Controllers\Api\Student\SubjectController as StudentSubjectController;
 use App\Http\Controllers\Api\Student\ClassController;
 use App\Http\Controllers\Api\Student\CBTController;
+use App\Http\Controllers\Api\Student\AnnouncementController as StudentAnnouncement;
 use App\Http\Controllers\Api\Public\LandingController;
 
 // PUBLIC ROUTES
@@ -57,6 +59,7 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::apiResource('subjects', AdminSubjectController::class);
         Route::apiResource('programs', ProgramController::class);
         Route::apiResource('teachers', TeacherController::class);
+        Route::apiResource('announcements', AdminAnnouncement::class);
         
         // Students
         Route::apiResource('students', StudentController::class);
@@ -104,6 +107,8 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         Route::post('classes/{id}/join', [ClassController::class, 'join']);
         Route::get('schedules', [ClassController::class, 'schedules']);
         Route::get('progress', [StudentDashboardController::class, 'progress']);
+        Route::get('announcements', [StudentAnnouncement::class, 'index']);
+        Route::get('announcements/recent', [StudentAnnouncement::class, 'recent']);
         
         // [BARU] Feedback untuk Siswa
         Route::get('feedbacks', [StudentDashboardController::class, 'feedbacks']);

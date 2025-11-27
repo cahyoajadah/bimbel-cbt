@@ -260,7 +260,11 @@ class CBTController extends Controller
         
         $result = StudentTryoutResult::with([
             'cbtSession.answers.question.answerOptions',
-            'cbtSession.answers.answerOption'
+            'cbtSession.answers.answerOption',
+            // [BARU] Eager load laporan soal dari siswa ini untuk paket ini
+            'cbtSession.answers.question.reports' => function($q) use ($student) {
+                $q->where('student_id', $student->id);
+            }
         ])
         ->where('student_id', $student->id)
         ->findOrFail($resultId);
@@ -268,20 +272,32 @@ class CBTController extends Controller
         $formattedQuestions = $result->cbtSession->answers->map(function($answer) {
             $question = $answer->question;
             
+            // [BARU] Ambil laporan terakhir siswa untuk soal ini (jika ada)
+            $myReport = $question->reports->first(); 
+
             return [
                 'id' => $question->id,
                 'order_number' => $question->order_number,
-                'type' => $question->type, // PENTING
+                'type' => $question->type,
                 'point_max' => $question->point,
                 'question_text' => $question->question_text,
                 'question_image' => $question->question_image,
-                'discussion' => $question->explanation, // PENTING
+                'discussion' => $question->explanation,
                 
+                // Data Jawaban
                 'student_answer_id' => $answer->answer_option_id,
                 'answer_text' => $answer->answer_text,
                 'selected_options' => $answer->selected_options,
                 'point_earned' => $answer->point_earned,
                 
+                // [BARU] Data Laporan
+                'user_report' => $myReport ? [
+                    'status' => $myReport->status,             // pending / resolved
+                    'content' => $myReport->report_content,    // Isi aduan siswa
+                    'response' => $myReport->admin_response,   // Balasan admin
+                    'date' => $myReport->created_at->format('d M Y'),
+                ] : null,
+
                 'options' => $question->answerOptions->map(function($option) {
                     return [
                         'id' => $option->id,

@@ -28,6 +28,7 @@ export const API_ENDPOINTS = {
   STUDENT_PROGRAMS: (id) => `/admin/students/${id}/programs`,
   STUDENT_ATTENDANCE: (id) => `/admin/students/${id}/attendance`,
   FEEDBACKS: '/admin/feedbacks',
+  ADMIN_ANNOUNCEMENTS: '/admin/announcements',
 
   // Question Maker
   QUESTION_PACKAGES: '/question-maker/packages',
@@ -48,6 +49,8 @@ export const API_ENDPOINTS = {
   STUDENT_SCHEDULES: '/student/schedules',
   PROGRESS: '/student/progress',
   STUDENT_FEEDBACKS: '/student/feedbacks',
+  STUDENT_ANNOUNCEMENTS: '/student/announcements',
+  STUDENT_ANNOUNCEMENTS_RECENT: '/student/announcements/recent',
   
   // CBT
   TRYOUTS: '/student/tryouts',

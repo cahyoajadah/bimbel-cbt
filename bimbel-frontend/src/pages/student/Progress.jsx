@@ -1,3 +1,4 @@
+// src/pages/student/Progress.jsx
 import { useQuery } from '@tanstack/react-query';
 import { Award, TrendingUp, Clock, Calendar, Eye, CheckCircle, XCircle } from 'lucide-react';
 import api from '../../api/axiosConfig';
@@ -12,7 +13,6 @@ export default function Progress() {
   const { data: progressData, isLoading, isError } = useQuery({
     queryKey: ['student-progress'],
     queryFn: async () => {
-      // Sekarang endpoint ini sudah terdefinisi, jadi tidak akan error localhost/api lagi
       const res = await api.get(API_ENDPOINTS.PROGRESS);
       return res.data.data;
     },
@@ -45,7 +45,7 @@ export default function Progress() {
       </div>
 
       {/* Kartu Statistik Ringkasan */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 transition-transform hover:scale-[1.01]">
           <div className="p-4 bg-blue-50 text-blue-600 rounded-full">
             <Award size={28} />
@@ -65,19 +65,9 @@ export default function Progress() {
             <h3 className="text-3xl font-bold text-gray-800">{summary?.completed_tryouts || 0}</h3>
           </div>
         </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center gap-5 transition-transform hover:scale-[1.01]">
-          <div className="p-4 bg-purple-50 text-purple-600 rounded-full">
-            <Clock size={28} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-gray-500">Total Jam Belajar</p>
-            <h3 className="text-3xl font-bold text-gray-800">{summary?.total_study_hours || 0}<span className="text-lg font-normal text-gray-500 ml-1">Jam</span></h3>
-          </div>
-        </div>
       </div>
 
-      {/* Tabel Riwayat (Sekarang Full Width karena grafik dihapus) */}
+      {/* Tabel Riwayat */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
           <h3 className="text-lg font-bold text-gray-800">Riwayat Tryout Terakhir</h3>
@@ -94,7 +84,8 @@ export default function Progress() {
                 <th className="px-6 py-4 font-semibold">Tanggal & Waktu</th>
                 <th className="px-6 py-4 font-semibold">Status Kelulusan</th>
                 <th className="px-6 py-4 font-semibold">Nilai Akhir</th>
-                <th className="px-6 py-4 font-semibold text-right">Aksi</th>
+                {/* [PERBAIKAN] Menggunakan text-left agar rata kiri */}
+                <th className="px-6 py-4 font-semibold text-center">Aksi</th>
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-gray-100">
@@ -126,7 +117,8 @@ export default function Progress() {
                       <span className="text-lg font-bold text-gray-800">{item.score}</span>
                       <span className="text-xs text-gray-400 ml-1">/ 100</span>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    {/* [PERBAIKAN] Menggunakan text-left agar tombol rata kiri */}
+                    <td className="px-6 py-4 text-center">
                       <Button 
                         variant="outline" 
                         size="sm"

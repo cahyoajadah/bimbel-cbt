@@ -125,7 +125,9 @@ export default function Login() {
             <div className="space-y-1 text-xs text-gray-600">
               <p>Admin: admin@bimbel.com / password123</p>
               <p>Pembuat Soal: pembuat.soal@bimbel.com / password123</p>
-              <p>Siswa: siswa@bimbel.com / password123</p>
+              <p>Siswa: siswautbk@bimbel.com / password123</p>
+              <p>Siswa: siswaskd@bimbel.com / password123</p>
+              <p>Siswa: siswacpns@bimbel.com / password123</p>
             </div>
           </div>
         </div>

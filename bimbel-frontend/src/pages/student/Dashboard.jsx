@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { 
   BookOpen, Clock, Calendar, TrendingUp, Video, ChevronRight, 
-  MapPin, Link as LinkIcon, AlertCircle 
+  MapPin, AlertCircle 
 } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
@@ -31,7 +31,6 @@ export default function Dashboard() {
 
   const { stats, upcoming_schedules, recent_tryouts } = dashboardData || {};
 
-  // Helper untuk format tanggal
   const formatDate = (dateString) => {
     const options = { weekday: 'long', day: 'numeric', month: 'long' };
     return new Date(dateString).toLocaleDateString('id-ID', options);
@@ -49,8 +48,8 @@ export default function Dashboard() {
         <p className="text-gray-600">Selamat datang kembali! Siap untuk belajar hari ini?</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Stats Cards - DIUBAH JADI 2 KOLOM */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
           <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
             <BookOpen size={24} />
@@ -70,25 +69,16 @@ export default function Dashboard() {
             <h3 className="text-2xl font-bold text-gray-900">{stats?.average_score || 0}</h3>
           </div>
         </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
-          <div className="p-3 bg-purple-50 text-purple-600 rounded-lg">
-            <Clock size={24} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Kehadiran</p>
-            <h3 className="text-2xl font-bold text-gray-900">{stats?.attendance_rate || 0}%</h3>
-          </div>
-        </div>
+        
+        {/* KARTU KEHADIRAN DIHAPUS */}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* [PERBAIKAN] JADWAL KEGIATAN (General) */}
+        {/* JADWAL KEGIATAN */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                    {/* Ganti Icon Video jadi Calendar */}
                     <Calendar className="text-blue-600" /> 
                     Jadwal Akan Datang
                 </h3>
@@ -96,7 +86,6 @@ export default function Dashboard() {
                     variant="ghost" 
                     size="sm" 
                     className="text-blue-600 hover:bg-blue-50"
-                    // [PERBAIKAN] Arahkan ke Schedules (Jadwal Lengkap), bukan Classes (Live)
                     onClick={() => navigate('/student/schedules')} 
                 >
                     Lihat Semua <ChevronRight size={16} />
@@ -107,13 +96,11 @@ export default function Dashboard() {
                 {upcoming_schedules?.length > 0 ? (
                     upcoming_schedules.map((schedule) => (
                         <div key={schedule.id} className="flex gap-4 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                            {/* Date Box */}
                             <div className="flex flex-col items-center justify-center bg-blue-50 text-blue-700 rounded-lg w-16 h-16 flex-shrink-0">
                                 <span className="text-xs font-bold uppercase">{new Date(schedule.start_time).toLocaleDateString('id-ID', { month: 'short' })}</span>
                                 <span className="text-xl font-bold">{new Date(schedule.start_time).getDate()}</span>
                             </div>
                             
-                            {/* Info */}
                             <div className="flex-1 min-w-0">
                                 <h4 className="font-bold text-gray-900 truncate">{schedule.title}</h4>
                                 <div className="text-sm text-gray-600 flex items-center gap-2 mt-1">

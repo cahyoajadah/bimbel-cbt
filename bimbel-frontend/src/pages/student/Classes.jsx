@@ -101,7 +101,7 @@ export default function StudentClasses() {
                 {/* Pengajar */}
                 <div className="flex items-center space-x-3 text-sm text-gray-600">
                   <User className="w-4 h-4 text-gray-400" />
-                  <span>{item.teacher?.user?.name || '-'}</span>
+                  <span>{item.teacher?.name || '-'}</span>
                 </div>
 
                 {/* Tombol Join */}

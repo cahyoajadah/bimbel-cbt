@@ -151,38 +151,57 @@ export default function Questions() {
     if (question) {
       setEditingQuestion(question);
       
-      let formattedOptions = [];
-      let shortAnswerKey = '';
+      // 1. Mapping Opsi Jawaban (Backend -> Form)
+      // Backend mungkin mengirim 'answer_options' (snake_case)
+      // Form butuh array object dengan key: label, text, is_correct, weight
+      
+      const rawOptions = question.answer_options || question.options || [];
+      
+      let formattedOptions = rawOptions.map(opt => ({
+        id: opt.id,          // Penting untuk update
+        label: opt.option_label || opt.label, // Handle beda nama
+        text: opt.option_text || opt.text,    // Handle beda nama (text vs option_text)
+        is_correct: Boolean(opt.is_correct),
+        weight: parseInt(opt.weight || 0)
+      }));
 
+      // 2. Handle Isian Singkat (Short Answer)
+      let shortAnswerKey = '';
       if (question.type === 'short') {
-        const correctOpt = question.options?.find(o => o.is_correct);
+        // Cari opsi yang benar
+        const correctOpt = formattedOptions.find(o => o.is_correct);
         shortAnswerKey = correctOpt ? correctOpt.text : '';
-      } else {
-        formattedOptions = question.options?.map(opt => ({
-          id: opt.id,
-          label: opt.label,
-          text: opt.text,
-          is_correct: Boolean(opt.is_correct),
-          weight: opt.weight || 0
-        })) || [];
       }
 
+      // 3. Jika opsi kosong (misal data rusak), beri default 4 opsi
+      if (formattedOptions.length === 0 && question.type !== 'short') {
+          formattedOptions = [
+            { label: 'A', text: '', is_correct: false, weight: 0 },
+            { label: 'B', text: '', is_correct: false, weight: 0 },
+            { label: 'C', text: '', is_correct: false, weight: 0 },
+            { label: 'D', text: '', is_correct: false, weight: 0 },
+          ];
+      }
+
+      // 4. Reset Form
       reset({
         type: question.type || 'single',
         question_text: question.question_text,
         duration_seconds: question.duration_seconds,
         point: question.point,
-        explanation: question.discussion || '', // Gunakan 'discussion' dari mapping backend
-        options: formattedOptions,
-        short_answer_key: shortAnswerKey 
+        explanation: question.explanation || question.discussion || '', // Handle beda nama
+        options: formattedOptions, // Masukkan array yang sudah diformat
+        short_answer_key: shortAnswerKey
       });
     } else {
+      // Mode Tambah Baru
       setEditingQuestion(null);
       reset({
         type: 'single',
         duration_seconds: 60,
         point: 5,
         explanation: '',
+        short_answer_key: '',
         options: [
             { label: 'A', text: '', is_correct: false, weight: 0 },
             { label: 'B', text: '', is_correct: false, weight: 0 },

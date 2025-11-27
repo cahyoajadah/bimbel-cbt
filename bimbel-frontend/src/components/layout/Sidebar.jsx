@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Book, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
-  Clock, TrendingUp, User, X, Activity
+  Clock, TrendingUp, User, X, Activity, Megaphone
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
@@ -13,6 +13,7 @@ const menuItems = {
     { path: '/admin/subjects', icon: Book, label: 'Mata Pelajaran' },
     { path: '/admin/materials', icon: BookOpen, label: 'Materi' },
     { path: '/admin/schedules', icon: Calendar, label: 'Jadwal' },
+    { path: '/admin/announcements', icon: Megaphone, label: "Pengumuman" }, // Import Megaphone dulu
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },
     { path: '/admin/students', icon: Users, label: 'Siswa' },
     // [UBAH] Path diperbarui menjadi '/admin/monitoring'

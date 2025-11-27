@@ -1,13 +1,21 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../api/axiosConfig';
-import { CheckCircle, XCircle, ArrowLeft, Clock, Award, CheckSquare, Square, AlertTriangle, Info } from 'lucide-react';
+import { API_ENDPOINTS } from '../../api/endpoints';
+import { CheckCircle, XCircle, ArrowLeft, Clock, Award, CheckSquare, Square, AlertTriangle, Info, Flag, MessageSquare, Check } from 'lucide-react';
 import { Button } from '../../components/common/Button';
+import { Modal } from '../../components/common/Modal';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
 
 export default function TryoutReview() {
   const { resultId } = useParams();
   const navigate = useNavigate();
+  
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [selectedQuestionId, setSelectedQuestionId] = useState(null);
+  const [reportContent, setReportContent] = useState('');
 
   const { data: reviewData, isLoading, error } = useQuery({
     queryKey: ['tryout-review', resultId],
@@ -17,25 +25,41 @@ export default function TryoutReview() {
     },
   });
 
-  if (isLoading) return (
-    <div className="flex justify-center items-center h-screen bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-    </div>
-  );
-  
-  if (error || !reviewData) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <h2 className="text-xl font-bold text-gray-800 mb-2">Gagal memuat pembahasan</h2>
-      <Button onClick={() => navigate('/student/Progress')}>Kembali ke Progress</Button>
-    </div>
-  );
+  const reportMutation = useMutation({
+    mutationFn: async (data) => {
+      return await api.post(API_ENDPOINTS.REPORT_QUESTION, data);
+    },
+    onSuccess: () => {
+      toast.success('Laporan berhasil dikirim');
+      handleCloseReportModal();
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal mengirim laporan')
+  });
+
+  const handleOpenReportModal = (questionId) => {
+      setSelectedQuestionId(questionId);
+      setReportContent('');
+      setIsReportModalOpen(true);
+  };
+
+  const handleCloseReportModal = () => {
+      setIsReportModalOpen(false);
+      setSelectedQuestionId(null);
+      setReportContent('');
+  };
+
+  const submitReport = () => {
+      if (!reportContent.trim()) return toast.error('Isi laporan tidak boleh kosong');
+      reportMutation.mutate({ question_id: selectedQuestionId, report_content: reportContent });
+  };
+
+  if (isLoading) return <div className="flex justify-center items-center h-screen bg-gray-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
+  if (error || !reviewData) return <div className="p-10 text-center">Gagal memuat data.</div>;
 
   const { score, correct_answers_count, total_questions, duration_taken, questions } = reviewData;
   const wrongOrPartialCount = total_questions - correct_answers_count;
 
-  // --- RENDER JAWABAN ---
   const renderAnswerReview = (q) => {
-    // 1. TIPE ISIAN SINGKAT
     if (q.type === 'short') {
         const myAns = q.answer_text || "-";
         const keyAns = q.options.find(o => o.is_correct)?.text || "-";
@@ -60,7 +84,6 @@ export default function TryoutReview() {
         );
     }
 
-    // 2. TIPE PILIHAN (Single / Weighted / Multiple)
     return (
         <div className="space-y-3 mt-4">
             {q.options.map((opt) => {
@@ -138,8 +161,8 @@ export default function TryoutReview() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-6">
-            <Button variant="ghost" onClick={() => navigate('/student/progress')} className="text-gray-600 hover:text-gray-900">
-              <ArrowLeft className="w-5 h-5 mr-2" /> Kembali ke Progress
+            <Button variant="ghost" onClick={() => navigate('/student/dashboard')} className="text-gray-600 hover:text-gray-900">
+              <ArrowLeft className="w-5 h-5 mr-2" /> Kembali ke Dashboard
             </Button>
             <h1 className="text-xl font-bold text-gray-900">Review Hasil Ujian</h1>
           </div>
@@ -178,49 +201,57 @@ export default function TryoutReview() {
             let statusIcon = null;
 
             if (q.type === 'weighted') {
-                // SKD
                 headerClass = "bg-blue-50 text-blue-700 border-blue-100";
-                statusText = `Poin SKD: ${earned}`;
+                statusText = `Poin: ${earned}`;
                 statusIcon = <Award size={16} />;
             } else if (q.type === 'multiple') {
-                // KOMPLEKS
                 if (earned === max) {
                     headerClass = "bg-green-50 text-green-700 border-green-100";
                     statusText = `Benar Sempurna (+${earned})`;
                     statusIcon = <CheckCircle size={16} />;
                 } else if (earned > 0) {
                     headerClass = "bg-yellow-50 text-yellow-700 border-yellow-100";
-                    statusText = `Benar Sebagian (+${earned})`;
+                    statusText = `Parsial (+${earned})`;
                     statusIcon = <AlertTriangle size={16} />;
+                } else {
+                    headerClass = "bg-red-50 text-red-700 border-red-100";
+                    statusText = "Salah";
+                    statusIcon = <XCircle size={16} />;
+                }
+            } else {
+                if (earned === max && max > 0) {
+                    headerClass = "bg-green-50 text-green-700 border-green-100";
+                    statusText = `Benar (+${earned})`;
+                    statusIcon = <CheckCircle size={16} />;
                 } else {
                     headerClass = "bg-red-50 text-red-700 border-red-100";
                     statusText = "Salah (0 Poin)";
                     statusIcon = <XCircle size={16} />;
                 }
-            } else {
-                // SINGLE & SHORT (Menampilkan Poin dengan Jelas)
-                if (earned === max && max > 0) {
-                    headerClass = "bg-green-50 text-green-700 border-green-100";
-                    statusText = `Benar (+${earned})`; // [FIXED] Tampilkan Poin
-                    statusIcon = <CheckCircle size={16} />;
-                } else {
-                    headerClass = "bg-red-50 text-red-700 border-red-100";
-                    statusText = "Salah (0 Poin)"; // [FIXED] Tampilkan Poin 0
-                    statusIcon = <XCircle size={16} />;
-                }
             }
 
             return (
-                <div key={q.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div key={q.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden group">
+                    {/* Header Soal */}
                     <div className={`px-6 py-3 border-b flex justify-between items-center ${headerClass}`}>
                         <div className="flex items-center gap-3">
                             <span className="bg-white/80 px-2 py-0.5 rounded border border-black/5 text-sm font-bold">No. {idx + 1}</span>
                             <span className="text-xs uppercase tracking-wide opacity-80 font-semibold">
-                                {q.type === 'multiple' ? 'Kompleks' : q.type === 'weighted' ? 'Bobot Nilai' : q.type === 'short' ? 'Isian Singkat' : 'Pilihan Ganda'}
+                                {q.type === 'multiple' ? 'Pilihan Ganda Kompleks' : q.type === 'weighted' ? 'Bobot Nilai' : q.type === 'short' ? 'Isian' : 'Pilihan Ganda'}
                             </span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm font-bold">
-                            {statusIcon} {statusText}
+                        <div className="flex items-center gap-3">
+                             <div className="flex items-center gap-2 text-sm font-bold mr-4">
+                                {statusIcon} {statusText}
+                             </div>
+                             
+                             {/* Tombol Lapor */}
+                             <button 
+                                onClick={() => handleOpenReportModal(q.id)}
+                                className="text-gray-400 hover:text-red-600 transition-colors flex items-center gap-1 text-xs font-medium bg-white/50 px-2 py-1 rounded border border-transparent hover:border-red-200 hover:bg-red-50"
+                            >
+                                <Flag size={14} /> Lapor
+                             </button>
                         </div>
                     </div>
 
@@ -232,7 +263,31 @@ export default function TryoutReview() {
 
                         {renderAnswerReview(q)}
 
-                        {/* PEMBAHASAN (Fixed: Selalu Muncul Kotaknya) */}
+                        {/* [BARU] STATUS LAPORAN & BALASAN ADMIN */}
+                        {q.user_report && (
+                            <div className={clsx(
+                                "mt-6 p-4 rounded-lg border flex gap-3 items-start",
+                                q.user_report.status === 'resolved' ? "bg-green-50 border-green-200" : "bg-yellow-50 border-yellow-200"
+                            )}>
+                                <div className={clsx("mt-0.5", q.user_report.status === 'resolved' ? "text-green-600" : "text-yellow-600")}>
+                                    {q.user_report.status === 'resolved' ? <CheckCircle size={20}/> : <Clock size={20}/>}
+                                </div>
+                                <div className="flex-1">
+                                    <h5 className={clsx("text-sm font-bold mb-1", q.user_report.status === 'resolved' ? "text-green-800" : "text-yellow-800")}>
+                                        {q.user_report.status === 'resolved' ? 'Laporan Diselesaikan' : 'Laporan Dikirim'}
+                                    </h5>
+                                    <p className="text-xs text-gray-600 mb-2 italic">"{q.user_report.content}"</p>
+                                    
+                                    {q.user_report.response && (
+                                        <div className="bg-white/60 p-3 rounded border border-black/5 text-sm text-gray-800">
+                                            <strong>Balasan Admin:</strong> {q.user_report.response}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* PEMBAHASAN */}
                         <div className="mt-8 pt-6 border-t border-gray-100">
                             <div className="bg-indigo-50/80 rounded-xl p-5 border border-indigo-100">
                                 <h4 className="text-indigo-900 font-bold flex items-center gap-2 mb-2">
@@ -244,9 +299,7 @@ export default function TryoutReview() {
                                         {q.discussion}
                                     </p>
                                 ) : (
-                                    <p className="text-gray-400 text-sm italic pl-7">
-                                        Belum ada pembahasan yang dibuat untuk soal ini.
-                                    </p>
+                                    <p className="text-gray-400 text-sm italic pl-7">Belum ada pembahasan untuk soal ini.</p>
                                 )}
                             </div>
                         </div>
@@ -255,6 +308,37 @@ export default function TryoutReview() {
             );
         })}
       </div>
+
+      {/* Modal Laporan */}
+      <Modal 
+         isOpen={isReportModalOpen} 
+         onClose={handleCloseReportModal} 
+         title="Laporkan Masalah Soal"
+         size="md"
+      >
+         <div className="space-y-4">
+             <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm flex items-start gap-2">
+                 <MessageSquare size={18} className="mt-0.5 shrink-0" />
+                 <p>Laporan Anda akan dikirim ke pembuat soal. Gunakan fitur ini jika ada kesalahan kunci jawaban, typo, atau gambar error.</p>
+             </div>
+
+             <div>
+                 <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi Masalah</label>
+                 <textarea 
+                    className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows="4"
+                    placeholder="Contoh: Kunci jawaban seharusnya A..."
+                    value={reportContent}
+                    onChange={(e) => setReportContent(e.target.value)}
+                 ></textarea>
+             </div>
+
+             <div className="flex justify-end gap-2 pt-2">
+                 <Button variant="outline" onClick={handleCloseReportModal}>Batal</Button>
+                 <Button onClick={submitReport} loading={reportMutation.isPending} variant="danger">Kirim Laporan</Button>
+             </div>
+         </div>
+      </Modal>
     </div>
   );
 }

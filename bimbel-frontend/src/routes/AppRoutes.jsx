@@ -14,6 +14,7 @@ import AdminDashboard from '../pages/admin/Dashboard';
 import AdminSubjects from '../pages/admin/Subjects';
 import AdminMaterials from '../pages/admin/Materials';
 import AdminSchedules from '../pages/admin/Schedules';
+import AdminAnnouncements from '../pages/admin/Announcements';
 import AdminTeachers from '../pages/admin/Teachers';
 import AdminStudents from '../pages/admin/Students';
 import AdminMonitoring from '../pages/admin/Monitoring'; // Pastikan file ini ada di src/pages/admin/Monitoring.jsx
@@ -36,6 +37,7 @@ import Schedules from '../pages/student/Schedules';
 import Progress from '../pages/student/Progress';
 import Profile from '../pages/student/Profile';
 import StudentFeedbacks from '../pages/student/Feedbacks';
+import StudentAnnouncements from '../pages/student/Announcements';
 
 // Layout
 import DashboardLayout from '../components/layout/DashboardLayout';
@@ -77,6 +79,7 @@ function AppRoutes() {
                     <Route path="subjects" element={<AdminSubjects />} />
                     <Route path="materials" element={<AdminMaterials />} />
                     <Route path="schedules" element={<AdminSchedules />} />
+                    <Route path="announcements" element={<AdminAnnouncements />} />
                     <Route path="teachers" element={<AdminTeachers />} />
                     <Route path="students" element={<AdminStudents />} />
                     {/* [UPDATE] Path diubah menjadi 'monitoring' agar sesuai dengan Sidebar & Dashboard */}
@@ -126,6 +129,7 @@ function AppRoutes() {
                     <Route path="progress" element={<Progress />} />
                     <Route path="feedbacks" element={<StudentFeedbacks />} />
                     <Route path="profile" element={<Profile />} />
+                    <Route path="announcements" element={<StudentAnnouncements />} />
                     <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
                   </Routes>
                 </DashboardLayout>
