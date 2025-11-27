@@ -3,7 +3,7 @@
 // ============================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, FileText, CheckCircle, ArrowLeft, ExternalLink, BookOpen } from 'lucide-react';
+import { Video, FileText, CheckCircle, ArrowLeft, ExternalLink, BookOpen, File } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
@@ -17,7 +17,9 @@ export default function SubjectMaterials() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: subject } = useQuery({
+  // 1. Fetch Data Detail Mapel (Nama, dll)
+  // Tambahkan 'isLoading: isSubjectLoading' untuk memantau loading data ini
+  const { data: subject, isLoading: isSubjectLoading } = useQuery({
     queryKey: ['subject-detail', subjectId],
     queryFn: async () => {
       const res = await api.get(`${API_ENDPOINTS.SUBJECTS}/${subjectId}`);
@@ -25,7 +27,9 @@ export default function SubjectMaterials() {
     },
   });
 
-  const { data: materialsData, isLoading } = useQuery({
+  // 2. Fetch Data Materi
+  // Ubah nama 'isLoading' jadi 'isMaterialsLoading' agar tidak bentrok
+  const { data: materialsData, isLoading: isMaterialsLoading } = useQuery({
     queryKey: ['subject-materials', subjectId],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.SUBJECT_MATERIALS(subjectId));
@@ -48,7 +52,10 @@ export default function SubjectMaterials() {
     },
   });
 
-  if (isLoading) {
+  // [PERBAIKAN UTAMA]
+  // Tampilkan Spinner jika SALAH SATU data (Subject ATAU Materials) masih loading.
+  // Ini memastikan saat tampilan muncul, Nama Mapel SUDAH ADA.
+  if (isSubjectLoading || isMaterialsLoading) {
     return <LoadingSpinner text="Memuat materi..." />;
   }
 
@@ -63,8 +70,9 @@ export default function SubjectMaterials() {
           Kembali
         </Button>
         <div>
+          {/* Sekarang subject.name pasti sudah ada karena kita menunggu loading selesai */}
           <h1 className="text-2xl font-bold text-gray-900">
-            {subject?.name || 'Loading...'}
+            {subject?.name}
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             {materials.length} Materi Tersedia
@@ -82,10 +90,12 @@ export default function SubjectMaterials() {
               <div className="flex items-start space-x-4">
                 <div className={clsx(
                   'w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0',
-                  material.type === 'video' ? 'bg-red-100' : 'bg-blue-100'
+                  material.type === 'video' ? 'bg-red-100' : material.type === 'pdf' ? 'bg-orange-100' : 'bg-blue-100'
                 )}>
                   {material.type === 'video' ? (
                     <Video className="w-6 h-6 text-red-600" />
+                  ) : material.type === 'pdf' ? (
+                    <File className="w-6 h-6 text-orange-600" />
                   ) : (
                     <FileText className="w-6 h-6 text-blue-600" />
                   )}
@@ -101,28 +111,27 @@ export default function SubjectMaterials() {
                     </p>
                   )}
                   <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    {material.duration_minutes && (
-                      <span>{material.duration_minutes} menit</span>
-                    )}
-                    <span className="capitalize">{material.type}</span>
+                    {/* Hapus logika duration_minutes jika di backend sudah dihapus kolomnya */}
+                    <span className="capitalize font-medium bg-gray-100 px-2 py-0.5 rounded text-gray-600">{material.type}</span>
                   </div>
                 </div>
               </div>
 
-              {material.is_completed && (
-                <div className="flex items-center text-green-600">
-                  <CheckCircle className="w-5 h-5 mr-1" />
-                  <span className="text-sm font-medium">Selesai</span>
+              {material.pivot?.is_completed ? ( // Pastikan akses pivot benar
+                <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-100">
+                  <CheckCircle className="w-4 h-4 mr-1.5" />
+                  <span className="text-sm font-bold">Selesai</span>
                 </div>
-              )}
+              ) : null}
             </div>
 
             {/* Video Player */}
-            {material.type === 'video' && material.youtube_url && (
+            {material.type === 'video' && material.content && (
               <div className="mb-4">
+                {/* Pastikan helper getYoutubeEmbedUrl menangani url biasa */}
                 <iframe
-                  className="w-full h-96 rounded-lg"
-                  src={getYoutubeEmbedUrl(material.youtube_url)}
+                  className="w-full h-64 md:h-96 rounded-lg shadow-sm border border-gray-200"
+                  src={getYoutubeEmbedUrl(material.content)}
                   title={material.title}
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -131,26 +140,39 @@ export default function SubjectMaterials() {
               </div>
             )}
 
-            {/* PDF Viewer */}
-            {material.type === 'pdf' && material.pdf_url && (
-              <div className="mb-4">
+            {/* PDF Viewer Link */}
+            {material.type === 'pdf' && material.content && (
+              <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <File className="text-orange-500" />
+                    <span className="text-sm font-medium text-gray-700 truncate max-w-xs">Dokumen Materi PDF</span>
+                </div>
                 <a
-                  href={material.pdf_url}
+                  // Asumsikan content adalah path relatif dari storage
+                  href={`${import.meta.env.VITE_API_URL.replace('/api', '')}/storage/${material.content}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
                 >
                   <ExternalLink className="w-4 h-4 mr-2" />
                   Buka PDF
                 </a>
               </div>
             )}
+            
+            {/* Text Content */}
+            {material.type === 'text' && material.content && (
+               <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 prose max-w-none text-sm text-gray-700">
+                  {material.content}
+               </div>
+            )}
 
-            {!material.is_completed && (
+            {!material.pivot?.is_completed && (
               <Button
                 onClick={() => completeMutation.mutate(material.id)}
                 loading={completeMutation.isPending}
                 icon={CheckCircle}
+                className="mt-2"
               >
                 Tandai Selesai
               </Button>
@@ -160,9 +182,10 @@ export default function SubjectMaterials() {
       </div>
 
       {materials.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Belum ada materi tersedia</p>
+        <div className="bg-white rounded-lg shadow p-12 text-center border-2 border-dashed border-gray-200">
+          <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900">Belum ada materi</h3>
+          <p className="text-gray-500">Materi untuk mata pelajaran ini belum tersedia.</p>
         </div>
       )}
     </div>

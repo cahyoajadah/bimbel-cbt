@@ -16,7 +16,6 @@ export default function QuestionReports() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [responseText, setResponseText] = useState('');
 
-  // Fetch Reports
   const { data: reportsData, isLoading } = useQuery({
     queryKey: ['question-reports', currentPage],
     queryFn: async () => {
@@ -28,10 +27,8 @@ export default function QuestionReports() {
   const reports = reportsData?.data || [];
   const pagination = reportsData;
 
-  // Mutation Respond
   const respondMutation = useMutation({
     mutationFn: async ({ id, admin_response, status }) => {
-      // [PERBAIKAN] Mengirim key 'admin_response' dan 'status' sesuai backend
       const res = await api.post(API_ENDPOINTS.REPORT_RESPOND(id), { 
           admin_response, 
           status 
@@ -39,7 +36,10 @@ export default function QuestionReports() {
       return res.data;
     },
     onSuccess: () => {
+      // [PERBAIKAN] Update list tabel DAN update notifikasi di Header
       queryClient.invalidateQueries(['question-reports']);
+      queryClient.invalidateQueries(['pending-reports']); 
+      
       handleCloseModal();
       toast.success('Laporan ditandai selesai');
     },
@@ -50,7 +50,6 @@ export default function QuestionReports() {
 
   const handleOpenModal = (report) => {
       setSelectedReport(report);
-      // Isi default jika sudah ada respon sebelumnya
       setResponseText(report.admin_response || ''); 
       setIsModalOpen(true);
   };
@@ -61,15 +60,13 @@ export default function QuestionReports() {
   };
 
   const handleSubmitResponse = () => {
-      // [PERBAIKAN] Mengirim data yang lengkap
       respondMutation.mutate({ 
           id: selectedReport.id, 
           admin_response: responseText || 'Masalah telah diperbaiki.', 
-          status: 'resolved' // Wajib dikirim
+          status: 'resolved'
       });
   };
 
-  // Columns
   const columns = [
     { 
         header: 'Status', 
@@ -141,7 +138,6 @@ export default function QuestionReports() {
         )}
       </div>
 
-      {/* Modal Detail Laporan */}
       <Modal 
          isOpen={isModalOpen} 
          onClose={handleCloseModal} 
@@ -150,7 +146,6 @@ export default function QuestionReports() {
       >
          {selectedReport && (
              <div className="space-y-6">
-                 {/* Detail Soal */}
                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Soal yang Dilaporkan</h4>
                      <p className="text-gray-800 whitespace-pre-wrap mb-4">{selectedReport.question?.question_text}</p>
@@ -159,13 +154,11 @@ export default function QuestionReports() {
                      )}
                  </div>
 
-                 {/* Isi Laporan */}
                  <div className="bg-red-50 p-4 rounded-lg border border-red-100">
                      <h4 className="text-xs font-bold text-red-600 uppercase mb-1">Keluhan Siswa ({selectedReport.student?.user?.name})</h4>
                      <p className="text-red-800 font-medium">{selectedReport.report_content}</p>
                  </div>
 
-                 {/* Tindakan (Hanya jika belum resolved) */}
                  {selectedReport.status !== 'resolved' ? (
                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Catatan Perbaikan (Opsional)</label>

@@ -4,7 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useUIStore } from '../../store/uiStore';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../api/services/authService';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { Fragment } from 'react';
@@ -15,26 +15,33 @@ export const Header = () => {
   const { user, logout } = useAuthStore();
   const { toggleSidebar } = useUIStore();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // LOGIKA NOTIFIKASI DINAMIS
-  // 1. SISWA -> Fetch Announcements
+  // 1. SISWA -> Fetch UNREAD Announcements (Format: Array)
   const { data: studentNotifs } = useQuery({
-    queryKey: ['recent-announcements'],
+    queryKey: ['unread-announcements'],
     queryFn: async () => (await api.get(API_ENDPOINTS.STUDENT_ANNOUNCEMENTS_RECENT)).data.data,
     enabled: user?.role === 'siswa',
+    refetchInterval: 30000,
   });
 
-  // 2. PEMBUAT SOAL -> Fetch Pending Reports
+  // 2. PEMBUAT SOAL -> Fetch Pending Reports (Format: Pagination)
   const { data: makerNotifs } = useQuery({
     queryKey: ['pending-reports'],
-    queryFn: async () => (await api.get('/question-maker/reports?status=pending')).data.data,
-    enabled: user?.role === 'pembuat_soal', // Ganti role sesuai DB Anda (misal: 'question_maker')
+    queryFn: async () => {
+        const res = await api.get('/question-maker/reports?status=pending');
+        // [PERBAIKAN] Ambil array dari dalam objek pagination (.data.data)
+        return res.data.data.data || []; 
+    },
+    enabled: user?.role === 'pembuat_soal',
+    refetchInterval: 60000,
   });
 
-  // Tentukan data notif yang dipakai
   const notifications = user?.role === 'siswa' ? studentNotifs : makerNotifs;
-  const notifTitle = user?.role === 'siswa' ? 'Pengumuman Terbaru' : 'Laporan Soal Baru';
-  const showBell = user?.role === 'siswa' || user?.role === 'pembuat_soal' || user?.role === 'question_maker';
+  const notifTitle = user?.role === 'siswa' ? 'Pengumuman Belum Dibaca' : 'Laporan Soal Baru';
+  
+  // Tampilkan lonceng untuk Siswa & Pembuat Soal
+  const showBell = user?.role === 'siswa' || user?.role === 'pembuat_soal';
 
   const logoutMutation = useMutation({
     mutationFn: authService.logout,
@@ -51,39 +58,38 @@ export const Header = () => {
     const roleNames = {
       'admin_manajemen': 'Admin Manajemen',
       'pembuat_soal': 'Pembuat Soal',
-      'question_maker': 'Pembuat Soal',
       'siswa': 'Siswa',
     };
     return roleNames[role] || role;
   };
 
-  const handleViewAll = () => {
+  const handleViewAll = (close) => {
+      close();
       if (user?.role === 'siswa') navigate('/student/announcements');
-      else navigate('/question-maker/reports');
+      else if (user?.role === 'pembuat_soal') navigate('/question-maker/reports');
   };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-        {/* Left side */}
         <div className="flex items-center">
           <button onClick={toggleSidebar} className="text-gray-500 hover:text-gray-700 focus:outline-none">
             <MenuIcon className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Right side */}
         <div className="flex items-center space-x-4">
           
-          {/* --- NOTIFIKASI DINAMIS --- */}
+          {/* --- NOTIFIKASI --- */}
           {showBell && (
             <Popover className="relative">
-              {({ open }) => (
+              {({ open, close }) => (
                 <>
                   <Popover.Button className={clsx("relative p-2 rounded-full hover:bg-gray-100 focus:outline-none", open && "bg-gray-100")}>
                     <Bell className={clsx("w-6 h-6", open ? "text-blue-600" : "text-gray-400")} />
+                    {/* Dot Merah Muncul Jika Array Length > 0 */}
                     {notifications?.length > 0 && (
-                      <span className="absolute top-1.5 right-1.5 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white" />
+                      <span className="absolute top-1.5 right-1.5 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
                     )}
                   </Popover.Button>
 
@@ -101,19 +107,24 @@ export const Header = () => {
                         <div className="p-4">
                             <div className="flex justify-between items-center mb-3 border-b pb-2">
                                 <h3 className="text-sm font-bold text-gray-900">{notifTitle}</h3>
-                                <button onClick={handleViewAll} className="text-xs text-blue-600 hover:underline">Lihat Semua</button>
                             </div>
                             
-                            <div className="space-y-3 max-h-64 overflow-y-auto">
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
                                 {notifications && notifications.length > 0 ? (
                                     notifications.map((item) => (
-                                        <div key={item.id} className="group relative flex flex-col gap-1 p-2 hover:bg-gray-50 rounded-md transition-colors cursor-default border-b border-gray-50 last:border-0">
-                                            {/* LOGIKA TAMPILAN ITEM (SISWA vs MAKER) */}
+                                        <div 
+                                            key={item.id} 
+                                            onClick={() => handleViewAll(close)}
+                                            className="group relative flex flex-col gap-1 p-2 hover:bg-blue-50 rounded-md transition-colors cursor-pointer border-b border-gray-50 last:border-0"
+                                        >
                                             {user.role === 'siswa' ? (
                                                 <>
-                                                    <h4 className="text-sm font-semibold text-gray-800 group-hover:text-blue-600">{item.title}</h4>
-                                                    <p className="text-xs text-gray-500 line-clamp-2">{item.content}</p>
-                                                    <span className="text-[10px] text-gray-400 mt-1">{new Date(item.created_at).toLocaleDateString('id-ID')}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                                                        <h4 className="text-sm font-bold text-gray-800">{item.title}</h4>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 line-clamp-1 ml-4">{item.content}</p>
+                                                    <span className="text-[10px] text-gray-400 ml-4">{new Date(item.created_at).toLocaleDateString('id-ID')}</span>
                                                 </>
                                             ) : (
                                                 <>
@@ -126,13 +137,13 @@ export const Header = () => {
                                             )}
                                         </div>
                                     ))
-                                ) : <p className="text-sm text-gray-500 text-center py-4">Tidak ada notifikasi baru.</p>}
+                                ) : <p className="text-sm text-gray-500 text-center py-4 italic">Tidak ada notifikasi baru.</p>}
                             </div>
                             
                             <div className="mt-4 pt-3 border-t border-gray-100">
                                 <button 
                                   className="flex w-full items-center justify-center px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                                  onClick={handleViewAll}
+                                  onClick={() => handleViewAll(close)}
                                 >
                                     Lihat Selengkapnya <ChevronRight size={14} className="ml-1" />
                                 </button>
@@ -145,8 +156,6 @@ export const Header = () => {
               )}
             </Popover>
           )}
-          {/* Jika Admin, tidak ada lonceng render sama sekali */}
-
 
           {/* User Menu */}
           <Menu as="div" className="relative">
@@ -173,7 +182,6 @@ export const Header = () => {
                   </button>
                 )}
               </Menu.Item>
-              
               <Menu.Item>
                 {({ active }) => (
                   <button

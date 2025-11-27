@@ -109,6 +109,7 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         Route::get('progress', [StudentDashboardController::class, 'progress']);
         Route::get('announcements', [StudentAnnouncement::class, 'index']);
         Route::get('announcements/recent', [StudentAnnouncement::class, 'recent']);
+        Route::post('announcements/{id}/read', [StudentAnnouncement::class, 'markAsRead']);
         
         // [BARU] Feedback untuk Siswa
         Route::get('feedbacks', [StudentDashboardController::class, 'feedbacks']);

@@ -51,6 +51,7 @@ export const API_ENDPOINTS = {
   STUDENT_FEEDBACKS: '/student/feedbacks',
   STUDENT_ANNOUNCEMENTS: '/student/announcements',
   STUDENT_ANNOUNCEMENTS_RECENT: '/student/announcements/recent',
+  ANNOUNCEMENT_READ: (id) => `/student/announcements/${id}/read`,
   
   // CBT
   TRYOUTS: '/student/tryouts',
