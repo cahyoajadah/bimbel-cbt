@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str; // Import Str
+use Illuminate\Support\Str; 
 use App\Mail\NewStudentAccount;
 
 class StudentController extends Controller
@@ -63,10 +63,13 @@ class StudentController extends Controller
         try {
             $role = Role::where('name', 'siswa')->firstOrFail();
             
+            // 1. Simpan Password Asli (Input Admin) untuk dikirim via Email
+            $rawPassword = $request->password;
+
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
-                'password' => Hash::make($request->password),
+                'password' => Hash::make($rawPassword), // Hash untuk DB
                 'phone' => $request->phone,
                 'role_id' => $role->id,
                 'is_active' => true,
@@ -92,14 +95,14 @@ class StudentController extends Controller
 
             DB::commit();
 
-            // [PERBAIKAN] HAPUS PENGIRIMAN EMAIL OTOMATIS DI SINI
-            // Admin harus klik tombol manual di tabel untuk kirim email.
+            // 2. Kirim Email Pendaftaran Awal
+            try {
+                Mail::to($user->email)->send(new NewStudentAccount($user, $rawPassword));
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Gagal kirim email store: ' . $e->getMessage());
+            }
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Siswa berhasil ditambahkan',
-                'data' => $student->load('user', 'programs')
-            ], 201);
+            return response()->json(['success' => true, 'message' => 'Siswa berhasil ditambahkan', 'data' => $student->load('user')], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -107,35 +110,33 @@ class StudentController extends Controller
         }
     }
 
-    // [METHOD BARU] Fitur Kirim Email Manual (Reset Password & Send)
+    // [FITUR] Reset Password & Kirim Email Manual
     public function sendAccountInfo($id)
     {
         $student = Student::with('user')->findOrFail($id);
         $user = $student->user;
 
-        // 1. Generate Password Acak Baru
-        $newPassword = Str::random(8); // Contoh: aBcD1234
+        // 1. Buat Password Baru Acak
+        $newPassword = Str::random(8); 
 
-        // 2. Update Password User di Database
+        // 2. Update Database
         $user->password = Hash::make($newPassword);
         $user->save();
 
-        // 3. Kirim Email dengan Password Baru
+        // 3. Kirim Email
         try {
             Mail::to($user->email)->send(new NewStudentAccount($user, $newPassword));
-            return response()->json(['success' => true, 'message' => 'Akun berhasil di-reset dan dikirim ke email siswa']);
+            return response()->json(['success' => true, 'message' => 'Password di-reset dan dikirim ke email siswa']);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => 'Gagal mengirim email: ' . $e->getMessage()], 500);
         }
     }
 
-    // ... Method update, destroy, show, progressDetail (Biarkan SAMA seperti sebelumnya) ...
-    public function update(Request $request, $id) { /* ... kode update ... */ 
-         // (Gunakan kode update dari file sebelumnya, tidak ada perubahan di sini)
-         // Agar singkat, saya tidak tulis ulang, tapi pastikan method update Anda tetap ada!
-         // --- MULAI KODE UPDATE LAMA (UNTUK KELENGKAPAN) ---
+    public function update(Request $request, $id)
+    {
         $student = Student::findOrFail($id);
         $user = $student->user;
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $user->id,
@@ -148,37 +149,61 @@ class StudentController extends Controller
             'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
             'program_ids' => 'nullable|array',
-            'program_ids.*' => 'exists:programs,id',
         ]);
+
         if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
+
         DB::beginTransaction();
         try {
-            $userData = ['name' => $request->name, 'email' => $request->email, 'phone' => $request->phone];
-            if ($request->filled('password')) $userData['password'] = Hash::make($request->password);
+            $userData = [
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+            ];
+            if ($request->filled('password')) {
+                $userData['password'] = Hash::make($request->password);
+            }
             $user->update($userData);
+
             $student->update([
-                'student_number' => $request->student_number, 'school' => $request->school,
-                'address' => $request->address, 'birth_date' => $request->birth_date,
-                'parent_name' => $request->parent_name, 'parent_phone' => $request->parent_phone,
+                'student_number' => $request->student_number,
+                'school' => $request->school,
+                'address' => $request->address,
+                'birth_date' => $request->birth_date,
+                'parent_name' => $request->parent_name,
+                'parent_phone' => $request->parent_phone,
             ]);
+
             if ($request->has('program_ids')) {
                 $syncData = [];
-                foreach ($request->program_ids as $programId) { $syncData[$programId] = ['start_date' => now()]; }
+                foreach ($request->program_ids as $programId) {
+                    $syncData[$programId] = ['start_date' => now()];
+                }
                 $student->programs()->sync($syncData);
             }
+
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Data siswa berhasil diperbarui', 'data' => $student->load('user', 'programs')]);
-        } catch (\Exception $e) { DB::rollBack(); return response()->json(['success' => false, 'message' => $e->getMessage()], 500); }
+            return response()->json(['success' => true, 'message' => 'Data diperbarui']);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
     }
 
-    public function destroy($id) {
+    public function destroy($id)
+    {
         $student = Student::findOrFail($id);
         $student->user->delete(); 
         return response()->json(['success' => true, 'message' => 'Siswa berhasil dihapus']);
     }
-    public function show($id) { $student = Student::with(['user', 'programs'])->findOrFail($id); return response()->json(['success' => true, 'data' => $student]); }
-    public function getPrograms($id) { $student = Student::findOrFail($id); return response()->json(['success' => true, 'data' => $student->programs]); }
-    public function getAttendance($id) { $student = Student::findOrFail($id); return response()->json(['success' => true, 'data' => $student->attendances]); }
+
+    public function show($id)
+    {
+        $student = Student::with(['user', 'programs'])->findOrFail($id);
+        return response()->json(['success' => true, 'data' => $student]);
+    }
+    
     public function progressDetail($id) {
         $student = Student::with(['user', 'tryoutResults.package'])->findOrFail($id);
         $attendanceCount = $student->attendances()->where('status', 'present')->count();
