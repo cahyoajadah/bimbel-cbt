@@ -11,6 +11,7 @@ import NotFound from '../pages/NotFound';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
+import AdminPrograms from '../pages/admin/Programs';
 import AdminSubjects from '../pages/admin/Subjects';
 import AdminMaterials from '../pages/admin/Materials';
 import AdminSchedules from '../pages/admin/Schedules';
@@ -75,7 +76,7 @@ function AppRoutes() {
                 <DashboardLayout role="admin">
                   <Routes>
                     <Route path="dashboard" element={<AdminDashboard />} />
-                    {/* Route Packages DIHAPUS */}
+                    <Route path="programs-manage" element={<AdminPrograms />} />
                     <Route path="subjects" element={<AdminSubjects />} />
                     <Route path="materials" element={<AdminMaterials />} />
                     <Route path="schedules" element={<AdminSchedules />} />

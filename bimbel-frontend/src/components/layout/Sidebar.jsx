@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { 
-  LayoutDashboard, Package, Book, BookOpen, Calendar, Users, 
+  LayoutDashboard, Package, Book, BookCopy, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
   Clock, TrendingUp, User, X, Activity, Megaphone
 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { useUIStore } from '../../store/uiStore';
 const menuItems = {
   admin: [
     { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/admin/programs-manage', icon: BookCopy, label: 'Program' },
     { path: '/admin/subjects', icon: Book, label: 'Mata Pelajaran' },
     { path: '/admin/materials', icon: BookOpen, label: 'Materi' },
     { path: '/admin/schedules', icon: Calendar, label: 'Jadwal' },
