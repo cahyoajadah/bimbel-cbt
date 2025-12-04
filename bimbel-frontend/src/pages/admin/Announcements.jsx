@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Search, Megaphone, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Megaphone } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
@@ -20,7 +20,7 @@ export default function AdminAnnouncements() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
 
-  // Fetch Data Pengumuman
+  // Fetch Data Pengumuman (Tabel - Pakai Pagination)
   const { data: queryData, isLoading } = useQuery({
     queryKey: ['admin-announcements', page, search],
     queryFn: async () => {
@@ -29,10 +29,14 @@ export default function AdminAnnouncements() {
     },
   });
 
-  // Fetch Data Program (Untuk Dropdown)
+  // Fetch Data Program (Dropdown - Pakai ?all=true)
   const { data: programs } = useQuery({
-    queryKey: ['admin-programs-list'],
-    queryFn: async () => (await api.get('/admin/programs')).data.data,
+    queryKey: ['admin-programs-list'], // Key khusus list
+    queryFn: async () => {
+      // [PERBAIKAN] Tambahkan ?all=true agar dapat Array, bukan Pagination
+      const res = await api.get('/admin/programs?all=true'); 
+      return res.data.data;
+    },
   });
 
   const announcements = queryData?.data || [];
@@ -44,7 +48,6 @@ export default function AdminAnnouncements() {
   const saveMutation = useMutation({
     mutationFn: async (data) => {
       const payload = { ...data };
-      // Jika value string kosong, ubah jadi null (untuk 'Semua Siswa')
       if (payload.program_id === "") payload.program_id = null;
 
       if (editingItem) return await api.put(`${API_ENDPOINTS.ADMIN_ANNOUNCEMENTS}/${editingItem.id}`, payload);
@@ -71,7 +74,7 @@ export default function AdminAnnouncements() {
       setEditingItem(item);
       setValue('title', item.title);
       setValue('content', item.content);
-      setValue('program_id', item.program_id || ""); // Jika null, set string kosong
+      setValue('program_id', item.program_id || "");
       setValue('is_active', item.is_active);
     } else {
       setEditingItem(null);
@@ -139,7 +142,6 @@ export default function AdminAnnouncements() {
         <form onSubmit={handleSubmit((data) => saveMutation.mutate(data))} className="space-y-4">
           <Input label="Judul" {...register('title', { required: true })} />
           
-          {/* DROPDOWN TARGET PROGRAM */}
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Target Penerima</label>
               <select 
@@ -147,6 +149,7 @@ export default function AdminAnnouncements() {
                   {...register('program_id')}
               >
                   <option value="">Semua Siswa (Umum)</option>
+                  {/* Programs sekarang pasti Array karena pakai ?all=true */}
                   {programs?.map(p => (
                       <option key={p.id} value={p.id}>Program: {p.name}</option>
                   ))}

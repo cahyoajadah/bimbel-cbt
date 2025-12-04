@@ -35,7 +35,7 @@ export default function Students() {
   // Fetch Programs untuk Dropdown
   const { data: programsData } = useQuery({
     queryKey: ['admin-programs-list'],
-    queryFn: async () => (await api.get('/admin/programs')).data,
+    queryFn: async () => (await api.get('/admin/programs?all=true')).data,
   });
   const programs = programsData?.data || [];
 

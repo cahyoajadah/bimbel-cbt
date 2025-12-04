@@ -29,6 +29,7 @@ export const API_ENDPOINTS = {
   STUDENT_ATTENDANCE: (id) => `/admin/students/${id}/attendance`,
   FEEDBACKS: '/admin/feedbacks',
   ADMIN_ANNOUNCEMENTS: '/admin/announcements',
+  ADMIN_SEND_CREDENTIALS: (id) => `/admin/students/${id}/send-credentials`,
 
   // Question Maker
   QUESTION_PACKAGES: '/question-maker/packages',

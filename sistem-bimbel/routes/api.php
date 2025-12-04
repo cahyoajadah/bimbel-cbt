@@ -67,6 +67,7 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::post('students/{id}/programs', [StudentController::class, 'assignProgram']);
         Route::get('students/{id}/attendance', [StudentController::class, 'getAttendance']);
         Route::post('students/{id}/attendance', [StudentController::class, 'recordAttendance']);
+        Route::post('students/{id}/send-credentials', [StudentController::class, 'sendAccountInfo']);
         
         // [BARU] Route Detail Progress untuk Monitoring
         Route::get('students/{id}/progress-detail', [StudentController::class, 'progressDetail']);
