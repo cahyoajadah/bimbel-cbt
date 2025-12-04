@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Student;
 use App\Models\User;
 use App\Models\Role;
+use App\Mail\NewStudentAccount;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class StudentController extends Controller
 {
@@ -40,11 +42,13 @@ class StudentController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            // User Data
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
             'phone' => 'required|string|max:20',
             
+            // Student Data
             'student_number' => 'required|string|max:50|unique:students,student_number',
             'school' => 'required|string|max:255',
             'address' => 'required|string',
@@ -52,6 +56,7 @@ class StudentController extends Controller
             'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
             
+            // Program
             'program_ids' => 'nullable|array',
             'program_ids.*' => 'exists:programs,id',
         ]);
@@ -64,15 +69,20 @@ class StudentController extends Controller
         try {
             $role = Role::where('name', 'siswa')->firstOrFail();
             
+            // Simpan password asli untuk dikirim via email
+            $rawPassword = $request->password;
+
+            // 1. Create User
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
-                'password' => Hash::make($request->password),
+                'password' => Hash::make($rawPassword),
                 'phone' => $request->phone,
                 'role_id' => $role->id,
                 'is_active' => true,
             ]);
 
+            // 2. Create Student
             $student = Student::create([
                 'user_id' => $user->id,
                 'student_number' => $request->student_number,
@@ -83,7 +93,7 @@ class StudentController extends Controller
                 'parent_phone' => $request->parent_phone,
             ]);
 
-            // [PERBAIKAN] Tambahkan start_date otomatis
+            // 3. Assign Program dengan start_date
             if ($request->has('program_ids')) {
                 $syncData = [];
                 foreach ($request->program_ids as $programId) {
@@ -94,9 +104,17 @@ class StudentController extends Controller
 
             DB::commit();
 
+            // 4. Kirim Email (Try-Catch agar error email tidak membatalkan registrasi)
+            try {
+                Mail::to($user->email)->send(new NewStudentAccount($user, $rawPassword));
+            } catch (\Exception $mailException) {
+                // Opsional: Log error email
+                // \Log::error("Gagal kirim email: " . $mailException->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Siswa berhasil ditambahkan',
+                'message' => 'Siswa berhasil ditambahkan & email dikirim',
                 'data' => $student->load('user', 'programs')
             ], 201);
 
