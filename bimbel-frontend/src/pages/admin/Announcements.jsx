@@ -20,7 +20,7 @@ export default function AdminAnnouncements() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
 
-  // Fetch Data Pengumuman (Tabel - Pakai Pagination)
+  // Fetch Data Pengumuman (Tabel)
   const { data: queryData, isLoading } = useQuery({
     queryKey: ['admin-announcements', page, search],
     queryFn: async () => {
@@ -29,15 +29,21 @@ export default function AdminAnnouncements() {
     },
   });
 
-  // Fetch Data Program (Dropdown - Pakai ?all=true)
-  const { data: programs } = useQuery({
-    queryKey: ['admin-programs-list'], // Key khusus list
+  // Fetch Data Program (Dropdown)
+  const { data: programsData } = useQuery({
+    queryKey: ['admin-programs-list'], 
     queryFn: async () => {
-      // [PERBAIKAN] Tambahkan ?all=true agar dapat Array, bukan Pagination
+      // Pastikan pakai ?all=true
       const res = await api.get('/admin/programs?all=true'); 
-      return res.data.data;
+      return res.data;
     },
   });
+
+  // [PERBAIKAN UTAMA] Ekstraksi Data Aman
+  // Cek apakah data berupa array langsung atau terbungkus dalam properti .data
+  const programsList = Array.isArray(programsData) 
+      ? programsData 
+      : (programsData?.data || []);
 
   const announcements = queryData?.data || [];
   const pagination = queryData;
@@ -142,6 +148,7 @@ export default function AdminAnnouncements() {
         <form onSubmit={handleSubmit((data) => saveMutation.mutate(data))} className="space-y-4">
           <Input label="Judul" {...register('title', { required: true })} />
           
+          {/* DROPDOWN TARGET PROGRAM */}
           <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Target Penerima</label>
               <select 
@@ -149,8 +156,8 @@ export default function AdminAnnouncements() {
                   {...register('program_id')}
               >
                   <option value="">Semua Siswa (Umum)</option>
-                  {/* Programs sekarang pasti Array karena pakai ?all=true */}
-                  {programs?.map(p => (
+                  {/* [PERBAIKAN] Gunakan programsList yang sudah aman */}
+                  {programsList.map(p => (
                       <option key={p.id} value={p.id}>Program: {p.name}</option>
                   ))}
               </select>

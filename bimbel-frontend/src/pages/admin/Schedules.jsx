@@ -1,5 +1,4 @@
-// src/pages/admin/Schedules.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit, Trash2, Calendar as CalIcon, Clock, User, MapPin, Link as LinkIcon, Search, BookOpen, Info } from 'lucide-react';
 import api from '../../api/axiosConfig';
@@ -18,29 +17,30 @@ export default function AdminSchedules() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [filteredSubjects, setFilteredSubjects] = useState([]);
   const [search, setSearch] = useState('');
 
-  // --- FETCH DATA LISTS ---
+  // --- FETCH DATA LISTS (Dropdown Resources) ---
   const { data: programsData } = useQuery({
     queryKey: ['admin-programs-list'],
     queryFn: async () => (await api.get('/admin/programs')).data,
   });
-  const programsList = programsData?.data?.data || programsData?.data || [];
+  // Gunakan useMemo agar referensi array stabil
+  const programsList = useMemo(() => programsData?.data?.data || programsData?.data || [], [programsData]);
   
   const { data: allSubjectsData } = useQuery({
     queryKey: ['admin-subjects-all'],
     queryFn: async () => (await api.get('/admin/subjects')).data,
   });
-  const allSubjects = allSubjectsData?.data?.data || allSubjectsData?.data || [];
+  // Gunakan useMemo agar referensi array stabil (Mencegah Infinite Loop)
+  const allSubjects = useMemo(() => allSubjectsData?.data?.data || allSubjectsData?.data || [], [allSubjectsData]);
 
   const { data: allTeachersData } = useQuery({
     queryKey: ['admin-teachers-all'],
     queryFn: async () => (await api.get('/admin/teachers')).data,
   });
-  const allTeachersList = allTeachersData?.data?.data || allTeachersData?.data || [];
+  const allTeachersList = useMemo(() => allTeachersData?.data?.data || allTeachersData?.data || [], [allTeachersData]);
   
-  // --- FETCH SCHEDULES ---
+  // --- FETCH SCHEDULES (Paginated Table Data) ---
   const { data: scheduleData, isLoading } = useQuery({
     queryKey: ['admin-schedules', currentPage, search],
     queryFn: async () => (await api.get(`/admin/schedules?page=${currentPage}&per_page=15&search=${search}`)).data,
@@ -55,31 +55,33 @@ export default function AdminSchedules() {
   });
 
   const classType = watch('class_type_select');
-  const selectedProgramId = watch('program_id');
   const scheduleType = watch('type');
+  const selectedProgramId = watch('program_id');
 
-  // --- LOGIKA FILTER MAPEL ---
+  // --- [OPTIMASI] FILTER MAPEL DENGAN USEMEMO ---
+  // Hitung filtered subjects secara otomatis saat program berubah (Tanpa State tambahan)
+  const filteredSubjects = useMemo(() => {
+      if (!selectedProgramId || !allSubjects.length) return [];
+      return allSubjects.filter(s => s.program_id == selectedProgramId);
+  }, [selectedProgramId, allSubjects]);
+
+  // --- LOGIKA RESET VALUE ---
+  // Hanya jalankan effect jika kita perlu MERESET subject_id yang tidak valid
   useEffect(() => {
-    if (allSubjects && Array.isArray(allSubjects)) {
-        const currentProgramId = getValues('program_id');
-        const currentSubjectId = getValues('subject_id'); 
-        
-        const filtered = currentProgramId && allSubjects 
-            ? allSubjects.filter(s => s.program_id == currentProgramId)
-            : [];
-        
-        setFilteredSubjects(filtered); 
-
-        if (currentSubjectId) {
-            const isSubjectStillValid = filtered.some(s => s.id == currentSubjectId);
-            if (!isSubjectStillValid && currentSubjectId !== '') { 
-               setValue('subject_id', '', { shouldValidate: true }); 
-            }
-        }
-    } else {
-        setFilteredSubjects([]);
-    }
-  }, [selectedProgramId, allSubjects, getValues, setValue]); 
+      const currentSubjectId = getValues('subject_id');
+      
+      // Jika ada subject terpilih, tapi tidak ada di daftar filter (tidak valid untuk program ini)
+      if (currentSubjectId && filteredSubjects.length > 0) {
+          const isValid = filteredSubjects.some(s => s.id == currentSubjectId);
+          if (!isValid) {
+              setValue('subject_id', ''); // Reset nilai
+          }
+      } 
+      // Jika program diganti jadi kosong/tidak ada, reset subject
+      else if (!selectedProgramId && currentSubjectId) {
+          setValue('subject_id', '');
+      }
+  }, [selectedProgramId, filteredSubjects, getValues, setValue]);
 
 
   // --- MUTATIONS ---
@@ -124,33 +126,47 @@ export default function AdminSchedules() {
     if (schedule) {
       setEditingSchedule(schedule);
       
-      const startDateObj = new Date(schedule.start_time);
-      const endDateObj = new Date(schedule.end_time);
+      let startDateVal = '';
+      let startTimeVal = '';
+      let endTimeVal = '';
+
+      if (schedule.start_time) {
+         const startObj = new Date(schedule.start_time);
+         startDateVal = startObj.toISOString().split('T')[0];
+         startTimeVal = startObj.toTimeString().slice(0, 5);
+      }
+      if (schedule.end_time) {
+         const endObj = new Date(schedule.end_time);
+         endTimeVal = endObj.toTimeString().slice(0, 5);
+      }
       
-      setValue('title', schedule.title);
-      setValue('type', schedule.type);
-      setValue('program_id', schedule.program_id || '');
-      
+      // Reset form dengan data edit
+      // Timeout kecil untuk memastikan UI siap
       setTimeout(() => {
+          setValue('title', schedule.title);
+          setValue('type', schedule.type);
+          setValue('program_id', schedule.program_id || '');
+          
+          // Subject & Teacher set belakangan agar list filter ready (jika diperlukan)
           setValue('subject_id', schedule.subject_id || '');
           setValue('teacher_id', schedule.teacher_id || '');
-      }, 100);
 
-      setValue('date', startDateObj.toISOString().split('T')[0]);
-      setValue('start_clock', startDateObj.toTimeString().slice(0, 5));
-      setValue('end_clock', endDateObj.toTimeString().slice(0, 5));
-      setValue('class_type_select', schedule.class_type || 'offline');
-      
-      if (schedule.class_type === 'zoom') setValue('zoom_link', schedule.zoom_link);
-      else setValue('location', schedule.location);
-      
-      setValue('description', schedule.description);
-      setValue('is_active', schedule.is_active);
-      setValue('max_participants', schedule.max_participants);
+          setValue('date', startDateVal);
+          setValue('start_clock', startTimeVal);
+          setValue('end_clock', endTimeVal);
+          
+          setValue('class_type_select', schedule.class_type || 'offline');
+          if (schedule.class_type === 'zoom') setValue('zoom_link', schedule.zoom_link);
+          else setValue('location', schedule.location);
+          
+          setValue('description', schedule.description);
+          setValue('is_active', schedule.is_active);
+          setValue('max_participants', schedule.max_participants);
+      }, 50);
+
     } else {
       setEditingSchedule(null);
       reset({ class_type_select: 'offline', type: 'class', is_active: true });
-      setFilteredSubjects([]);
     }
     setIsModalOpen(true);
   };
@@ -271,10 +287,7 @@ export default function AdminSchedules() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-            <h1 className="text-2xl font-bold text-gray-800">Jadwal & Kegiatan</h1>
-            <p className="text-sm text-gray-600">Kelola jadwal kelas belajar dan tryout</p>
-        </div>
+        <h1 className="text-2xl font-bold text-gray-800">Jadwal & Kegiatan</h1>
         <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Jadwal</Button>
       </div>
 
@@ -310,7 +323,6 @@ export default function AdminSchedules() {
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           
-          {/* Section 1: Informasi Kegiatan */}
           <div className="space-y-4 border-b pb-4">
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                 <BookOpen size={16}/> 1. Informasi Kegiatan
@@ -342,7 +354,6 @@ export default function AdminSchedules() {
                 </div>
             </div>
 
-            {/* Conditional Input untuk Tipe Kelas */}
             {scheduleType === 'class' && (
               <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
                 <div>
@@ -350,11 +361,10 @@ export default function AdminSchedules() {
                     <select 
                         className="w-full border-gray-300 rounded-lg shadow-sm p-2 border disabled:bg-gray-100" 
                         {...register('subject_id', { required: 'Mapel wajib diisi' })}
-                        disabled={!selectedProgramId || filteredSubjects.length === 0}
+                        disabled={!filteredSubjects.length}
                     >
                         <option value="">
-                            {!selectedProgramId ? '-- Pilih Program Dulu --' : 
-                             filteredSubjects.length === 0 ? '-- Tidak ada Mapel --' : '-- Pilih Mapel --'}
+                            {!filteredSubjects.length ? '-- Tidak ada Mapel --' : '-- Pilih Mapel --'}
                         </option>
                         {filteredSubjects.map(s => (
                             <option key={s.id} value={s.id}>{s.name}</option>
@@ -375,7 +385,6 @@ export default function AdminSchedules() {
             )}
           </div>
 
-          {/* Section 2: Waktu & Pelaksanaan */}
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                 <Clock size={16}/> 2. Waktu & Pelaksanaan

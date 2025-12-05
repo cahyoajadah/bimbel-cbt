@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit, Trash2, Search, User, Mail, Phone, GraduationCap, MapPin, BookOpen, Send } from 'lucide-react';
 import api from '../../api/axiosConfig';
-import { API_ENDPOINTS } from '../../api/endpoints'; // Pastikan import ini ada
+import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
 import { Table, Pagination } from '../../components/common/Table';
 import { Modal } from '../../components/common/Modal';
@@ -35,9 +35,9 @@ export default function Students() {
   // Fetch Programs
   const { data: programsData } = useQuery({
     queryKey: ['admin-programs-list'],
-    queryFn: async () => (await api.get('/admin/programs')).data,
+    queryFn: async () => (await api.get('/admin/programs?all=true')).data,
   });
-  const programs = programsData?.data || [];
+  const programs = Array.isArray(programsData) ? programsData : (programsData?.data || []);
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
 
@@ -83,7 +83,6 @@ export default function Students() {
     },
   });
 
-  // [MUTATION BARU] Kirim Kredensial
   const sendEmailMutation = useMutation({
       mutationFn: async (id) => {
           const res = await api.post(API_ENDPOINTS.ADMIN_SEND_CREDENTIALS(id));
@@ -94,13 +93,22 @@ export default function Students() {
   });
 
   // --- HANDLERS ---
-  
-  // [HANDLER BARU] Kirim Email Manual
   const handleSendEmail = (student) => {
       showConfirm({
-          title: 'Kirim Info Akun',
-          message: `PERINGATAN: Sistem akan membuat password baru secara acak untuk <b>${student.user?.name}</b> dan mengirimkannya ke email <b>${student.user?.email}</b>.<br/><br/>Password lama tidak akan berlaku lagi. Lanjutkan?`,
-          confirmText: 'Reset & Kirim',
+          title: 'Reset & Kirim Akun',
+          message: (
+            <div className="text-left text-sm text-gray-600 space-y-3">
+                <p>Anda akan mengatur ulang password untuk siswa ini:</p>
+                <ul className="list-disc pl-5 font-medium text-gray-800">
+                    <li>Nama: {student.user?.name}</li>
+                    <li>Email: {student.user?.email}</li>
+                </ul>
+                <div className="text-red-600 font-bold bg-red-50 p-3 rounded border border-red-100 mt-2">
+                    ⚠️ Password lama tidak akan berlaku lagi. Password baru akan digenerate acak dan dikirim otomatis ke email tersebut.
+                </div>
+            </div>
+          ),
+          confirmText: 'Kirim Password Baru',
           type: 'warning',
           onConfirm: () => sendEmailMutation.mutate(student.id)
       });
@@ -124,8 +132,8 @@ export default function Students() {
 
       const firstProgramId = student.programs?.[0]?.id || '';
       setValue('program_id', firstProgramId);
-
-      setValue('password', '');
+      
+      // Password tidak perlu diset karena field-nya disembunyikan saat edit
     } else {
       setEditingStudent(null);
       reset({ 
@@ -149,14 +157,12 @@ export default function Students() {
     };
     delete payload.program_id;
 
-    if (editingStudent && (!data.password || data.password.trim() === '')) {
-        delete payload.password;
-    }
-
+    // [PERBAIKAN] Hapus password dari payload jika sedang EDIT
     if (editingStudent) {
-      updateMutation.mutate({ id: editingStudent.id, data: payload });
+        delete payload.password;
+        updateMutation.mutate({ id: editingStudent.id, data: payload });
     } else {
-      createMutation.mutate(payload);
+        createMutation.mutate(payload);
     }
   };
 
@@ -211,7 +217,6 @@ export default function Students() {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          {/* TOMBOL KIRIM EMAIL */}
           <Button 
             size="sm" 
             variant="outline" 
@@ -276,23 +281,27 @@ export default function Students() {
             <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                 <User size={16}/> 1. Informasi Akun
             </h3>
+            
             <Input label="Nama Lengkap" placeholder="Nama Siswa" {...register('name', { required: 'Nama wajib diisi' })} error={errors.name?.message} />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <Input label="Email" type="email" placeholder="email@contoh.com" {...register('email', { required: 'Email wajib diisi' })} error={errors.email?.message} />
+                <Input label="Email (Username)" type="email" placeholder="email@contoh.com" {...register('email', { required: 'Email wajib diisi' })} error={errors.email?.message} />
                 <Input label="Nomor HP Siswa" type="tel" placeholder="08..." {...register('phone', { required: 'HP Siswa wajib diisi' })} error={errors.phone?.message} />
             </div>
             
-            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-               <Input 
-                label={editingStudent ? "Ganti Password (Opsional)" : "Password"} 
-                type="password" 
-                placeholder={editingStudent ? "Kosongkan jika tidak diubah" : "Min. 8 karakter"}
-                {...register('password', { required: !editingStudent, minLength: { value: 8, message: 'Min 8 karakter' } })} 
-                error={errors.password?.message} 
-               />
-               {!editingStudent && <p className="text-xs text-blue-600 mt-1">Password default ini akan dikirim ke email siswa.</p>}
-            </div>
+            {/* [PERBAIKAN] Hanya muncul jika BUKAN EDITING */}
+            {!editingStudent && (
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                   <Input 
+                    label="Password Awal" 
+                    type="password" 
+                    placeholder="Min. 8 karakter"
+                    {...register('password', { required: true, minLength: { value: 8, message: 'Min 8 karakter' } })} 
+                    error={errors.password?.message} 
+                   />
+                   <p className="text-xs text-blue-600 mt-1">Password ini akan dikirim otomatis ke email siswa setelah disimpan.</p>
+                </div>
+            )}
           </div>
 
           <div className="space-y-4 border-b pb-4">
@@ -344,7 +353,7 @@ export default function Students() {
           <div className="flex justify-end space-x-2 pt-2 mt-4">
             <Button type="button" variant="outline" onClick={handleCloseModal}>Batal</Button>
             <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
-              {editingStudent ? 'Perbarui Data' : 'Simpan Siswa'}
+              {editingStudent ? 'Perbarui Data' : 'Simpan & Kirim Akun'}
             </Button>
           </div>
 

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str; 
+use Illuminate\Support\Str; // [PENTING] Import Str untuk generate random password
 use App\Mail\NewStudentAccount;
 
 class StudentController extends Controller
@@ -40,41 +40,51 @@ class StudentController extends Controller
         ]);
     }
 
+    // [FITUR 1] Create & Kirim Email Otomatis (Password Inputan)
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
+            // User Data
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
             'phone' => 'required|string|max:20',
+            
+            // Student Data
             'student_number' => 'required|string|max:50|unique:students,student_number',
             'school' => 'required|string|max:255',
             'address' => 'required|string',
             'birth_date' => 'required|date',
             'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
+            
+            // Program
             'program_ids' => 'nullable|array',
             'program_ids.*' => 'exists:programs,id',
         ]);
 
-        if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
 
         DB::beginTransaction();
         try {
             $role = Role::where('name', 'siswa')->firstOrFail();
             
-            // 1. Simpan Password Asli (Input Admin) untuk dikirim via Email
+            // 1. Simpan Password Asli ke Variabel (untuk dikirim ke email)
             $rawPassword = $request->password;
 
+            // 2. Create User (Password di-hash ke database)
             $user = User::create([
                 'name' => $request->name,
                 'email' => $request->email,
-                'password' => Hash::make($rawPassword), // Hash untuk DB
+                'password' => Hash::make($rawPassword), 
                 'phone' => $request->phone,
                 'role_id' => $role->id,
                 'is_active' => true,
             ]);
 
+            // 3. Create Student
             $student = Student::create([
                 'user_id' => $user->id,
                 'student_number' => $request->student_number,
@@ -95,14 +105,18 @@ class StudentController extends Controller
 
             DB::commit();
 
-            // 2. Kirim Email Pendaftaran Awal
+            // 4. Kirim Email (Password Asli)
             try {
                 Mail::to($user->email)->send(new NewStudentAccount($user, $rawPassword));
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Gagal kirim email store: ' . $e->getMessage());
+            } catch (\Exception $mailEx) {
+                \Illuminate\Support\Facades\Log::error("Gagal kirim email store: " . $mailEx->getMessage());
             }
 
-            return response()->json(['success' => true, 'message' => 'Siswa berhasil ditambahkan', 'data' => $student->load('user')], 201);
+            return response()->json([
+                'success' => true,
+                'message' => 'Siswa berhasil ditambahkan & email dikirim',
+                'data' => $student->load('user', 'programs')
+            ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
@@ -110,20 +124,20 @@ class StudentController extends Controller
         }
     }
 
-    // [FITUR] Reset Password & Kirim Email Manual
+    // [FITUR 2] Tombol Manual: Reset Password & Kirim Email Baru
     public function sendAccountInfo($id)
     {
         $student = Student::with('user')->findOrFail($id);
         $user = $student->user;
 
-        // 1. Buat Password Baru Acak
+        // 1. Generate Password Baru Acak
         $newPassword = Str::random(8); 
 
         // 2. Update Database
         $user->password = Hash::make($newPassword);
         $user->save();
 
-        // 3. Kirim Email
+        // 3. Kirim Email Baru
         try {
             Mail::to($user->email)->send(new NewStudentAccount($user, $newPassword));
             return response()->json(['success' => true, 'message' => 'Password di-reset dan dikirim ke email siswa']);
@@ -149,6 +163,7 @@ class StudentController extends Controller
             'parent_name' => 'required|string|max:255',
             'parent_phone' => 'required|string|max:20',
             'program_ids' => 'nullable|array',
+            'program_ids.*' => 'exists:programs,id',
         ]);
 
         if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
@@ -204,6 +219,7 @@ class StudentController extends Controller
         return response()->json(['success' => true, 'data' => $student]);
     }
     
+    // Helper Progress
     public function progressDetail($id) {
         $student = Student::with(['user', 'tryoutResults.package'])->findOrFail($id);
         $attendanceCount = $student->attendances()->where('status', 'present')->count();
