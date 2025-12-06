@@ -221,11 +221,11 @@ class StudentController extends Controller
     
     // Helper Progress
     public function progressDetail($id) {
-        $student = Student::with(['user', 'tryoutResults.package'])->findOrFail($id);
+        $student = Student::with(['user', 'tryoutResults.questionPackage'])->findOrFail($id);
         $attendanceCount = $student->attendances()->where('status', 'present')->count();
         $completedMaterials = $student->materials()->wherePivot('is_completed', true)->count();
         $recentTryouts = $student->tryoutResults()->orderBy('created_at', 'desc')->take(5)->get()->map(function($res) {
-                return ['package_name' => $res->package->name ?? 'Paket dihapus', 'date' => $res->created_at->format('d M Y'), 'total_score' => $res->total_score];
+                return ['package_name' => $res->questionPackage->name ?? 'Paket dihapus', 'date' => $res->created_at->format('d M Y'), 'total_score' => $res->total_score];
         });
         $avgScore = $student->tryoutResults()->avg('total_score');
         return response()->json(['success' => true, 'data' => ['attendance_count' => $attendanceCount, 'completed_materials' => $completedMaterials, 'average_score' => round($avgScore ?? 0, 2), 'recent_tryouts' => $recentTryouts]]);

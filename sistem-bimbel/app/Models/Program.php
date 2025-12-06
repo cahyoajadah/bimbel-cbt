@@ -1,34 +1,38 @@
 <?php
-// ============================================
-// app/Models/Program.php
-// ============================================
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Program extends Model
 {
-    protected $fillable = ['name', 'code', 'description', 'is_active'];
+    use HasFactory;
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $fillable = [
+        'code',
+        'name', 
+        'description', 
+        'is_active'
+    ];
 
-    public function studentPrograms(): HasMany
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
+    // [WAJIB ADA] Relasi ke Siswa
+    public function students()
     {
-        return $this->hasMany(StudentProgram::class);
+        // Relasi Many-to-Many dengan tabel pivot student_programs
+        return $this->belongsToMany(Student::class, 'student_programs');
     }
-
-    public function packages(): HasMany
-    {
-        return $this->hasMany(Package::class);
-    }
-
-    public function subjects(): HasMany
+    // Relasi ke Mata Pelajaran
+    public function subjects()
     {
         return $this->hasMany(Subject::class);
     }
-
-    public function questionPackages(): HasMany
+    // Relasi ke Paket Soal
+    public function questionPackages()
     {
         return $this->hasMany(QuestionPackage::class);
     }

@@ -25,12 +25,11 @@ export const Header = () => {
     refetchInterval: 30000,
   });
 
-  // 2. PEMBUAT SOAL -> Fetch Pending Reports (Format: Pagination)
+  // 2. PEMBUAT SOAL -> Fetch Pending Reports (Format: Pagination -> Array)
   const { data: makerNotifs } = useQuery({
     queryKey: ['pending-reports'],
     queryFn: async () => {
         const res = await api.get('/question-maker/reports?status=pending');
-        // [PERBAIKAN] Ambil array dari dalam objek pagination (.data.data)
         return res.data.data.data || []; 
     },
     enabled: user?.role === 'pembuat_soal',
@@ -40,7 +39,6 @@ export const Header = () => {
   const notifications = user?.role === 'siswa' ? studentNotifs : makerNotifs;
   const notifTitle = user?.role === 'siswa' ? 'Pengumuman Belum Dibaca' : 'Laporan Soal Baru';
   
-  // Tampilkan lonceng untuk Siswa & Pembuat Soal
   const showBell = user?.role === 'siswa' || user?.role === 'pembuat_soal';
 
   const logoutMutation = useMutation({
@@ -87,7 +85,6 @@ export const Header = () => {
                 <>
                   <Popover.Button className={clsx("relative p-2 rounded-full hover:bg-gray-100 focus:outline-none", open && "bg-gray-100")}>
                     <Bell className={clsx("w-6 h-6", open ? "text-blue-600" : "text-gray-400")} />
-                    {/* Dot Merah Muncul Jika Array Length > 0 */}
                     {notifications?.length > 0 && (
                       <span className="absolute top-1.5 right-1.5 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
                     )}
@@ -132,7 +129,7 @@ export const Header = () => {
                                                         <FileWarning size={14} /> Laporan #{item.id}
                                                     </h4>
                                                     <p className="text-xs text-gray-800 font-medium line-clamp-1">"{item.question?.question_text || 'Soal dihapus'}"</p>
-                                                    <p className="text-xs text-gray-500 line-clamp-1">Oleh: {item.student?.user?.name}</p>
+                                                    <p className="text-xs text-gray-400">Oleh: {item.student?.user?.name}</p>
                                                 </>
                                             )}
                                         </div>
@@ -172,16 +169,21 @@ export const Header = () => {
             </Menu.Button>
 
             <Menu.Items className="absolute right-0 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50">
-              <Menu.Item>
-                {({ active }) => (
-                  <button
-                    onClick={() => navigate(user?.role === 'siswa' ? '/student/profile' : '#')}
-                    className={clsx('flex w-full items-center px-4 py-2 text-sm', active ? 'bg-gray-100' : '')}
-                  >
-                    <User className="w-4 h-4 mr-2" /> Profil
-                  </button>
-                )}
-              </Menu.Item>
+              
+              {/* [PERBAIKAN] Menu Profil Hanya untuk Siswa */}
+              {user?.role === 'siswa' && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={() => navigate('/student/profile')}
+                        className={clsx('flex w-full items-center px-4 py-2 text-sm', active ? 'bg-gray-100' : '')}
+                      >
+                        <User className="w-4 h-4 mr-2" /> Profil
+                      </button>
+                    )}
+                  </Menu.Item>
+              )}
+              
               <Menu.Item>
                 {({ active }) => (
                   <button

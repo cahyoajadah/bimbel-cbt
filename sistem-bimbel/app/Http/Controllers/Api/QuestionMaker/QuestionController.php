@@ -1,27 +1,20 @@
 <?php
-// ============================================
-// app/Http/Controllers/Api/QuestionMaker/QuestionController.php
-// ============================================
+
 namespace App\Http\Controllers\Api\QuestionMaker;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreQuestionRequest;
 use App\Models\Question;
 use App\Models\QuestionPackage;
-use App\Models\AnswerOption;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class QuestionController extends Controller
 {
     public function index($packageId)
     {
         $package = QuestionPackage::findOrFail($packageId);
-        $questions = $package->questions()
-            ->with('answerOptions')
-            ->orderBy('order_number')
-            ->get();
+        $questions = $package->questions()->orderBy('order_number')->get();
 
         return response()->json([
             'success' => true,
@@ -32,154 +25,144 @@ class QuestionController extends Controller
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(StoreQuestionRequest $request, $packageId)
+    public function store(Request $request, $packageId)
     {
+        $package = QuestionPackage::findOrFail($packageId);
+
+        $validator = Validator::make($request->all(), [
+            'type' => 'required|in:single,multiple,weighted,short',
+            'question_text' => 'required|string',
+            'point' => 'required|numeric|min:0',
+            'duration_seconds' => 'nullable|integer|min:0',
+            'explanation' => 'nullable|string',
+            'options' => 'nullable|array',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
         DB::beginTransaction();
         try {
-            $imagePath = null;
-            if ($request->hasFile('question_image')) {
-                $imagePath = $request->file('question_image')->store('questions', 'public');
-            }
+            // Tentukan nomor urut otomatis
+            $lastOrder = $package->questions()->max('order_number') ?? 0;
 
-            $question = Question::create([
-                'question_package_id' => $packageId,
+            $question = $package->questions()->create([
                 'type' => $request->type,
                 'question_text' => $request->question_text,
-                'question_image' => $imagePath,
                 'point' => $request->point,
-                'explanation' => $request->explanation, // <--- [PERBAIKAN] Tambahkan ini
-                'order_number' => Question::where('question_package_id', $packageId)->max('order_number') + 1,
+                'duration_seconds' => $request->duration_seconds ?? 60,
+                'explanation' => $request->explanation,
+                'order_number' => $lastOrder + 1,
             ]);
 
-            // ... (Sisa kode simpan options biarkan sama) ...
+            // Simpan Opsi Jawaban
             if ($request->has('options')) {
-                foreach ($request->options as $index => $optionData) {
-                    // ... (Logika simpan opsi sama seperti sebelumnya) ...
-                    $optionImagePath = null;
-                    if (isset($optionData['option_image']) && $optionData['option_image'] instanceof \Illuminate\Http\UploadedFile) {
-                        $optionImagePath = $optionData['option_image']->store('options', 'public');
-                    }
-
-                    $label = $request->type === 'short' ? null : chr(65 + $index);
-
+                foreach ($request->options as $opt) {
                     $question->answerOptions()->create([
-                        'option_label' => $label,
-                        'option_text' => $optionData['option_text'] ?? '',
-                        'option_image' => $optionImagePath,
-                        'is_correct' => filter_var($optionData['is_correct'], FILTER_VALIDATE_BOOLEAN),
-                        'weight' => $optionData['weight'] ?? 0,
+                        'option_label' => $opt['label'] ?? null,
+                        // Handle kemungkinan nama key berbeda dari frontend
+                        'option_text' => $opt['option_text'] ?? $opt['text'] ?? '', 
+                        'is_correct' => $opt['is_correct'] ?? false,
+                        'weight' => $opt['weight'] ?? 0,
                     ]);
                 }
             }
 
+            // [PERBAIKAN] HAPUS increment total_questions karena kolom tidak ada
+            // $package->increment('total_questions'); 
+
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Soal berhasil dibuat'], 201);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Soal berhasil ditambahkan',
+                'data' => $question->load('answerOptions')
+            ], 201);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal menyimpan soal: ' . $e->getMessage()], 500);
         }
     }
 
     public function show($packageId, $id)
     {
-        $question = Question::where('question_package_id', $packageId)
-            ->with('answerOptions')
+        $question = Question::with('answerOptions')
+            ->where('question_package_id', $packageId)
             ->findOrFail($id);
 
-        return response()->json([
-            'success' => true,
-            'data' => $question
-        ]);
+        return response()->json(['success' => true, 'data' => $question]);
     }
 
-    public function update(StoreQuestionRequest $request, $packageId, $id)
+    public function update(Request $request, $packageId, $id)
     {
         $question = Question::where('question_package_id', $packageId)->findOrFail($id);
 
+        $validator = Validator::make($request->all(), [
+            'type' => 'required|in:single,multiple,weighted,short',
+            'question_text' => 'required|string',
+            'point' => 'required|numeric|min:0',
+            'duration_seconds' => 'nullable|integer|min:0',
+            'explanation' => 'nullable|string',
+            'options' => 'nullable|array',
+        ]);
+
+        if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
+
         DB::beginTransaction();
         try {
-            $dataToUpdate = [
+            $question->update([
                 'type' => $request->type,
                 'question_text' => $request->question_text,
                 'point' => $request->point,
-                'explanation' => $request->explanation, // <--- [PERBAIKAN] Tambahkan ini
-            ];
+                'duration_seconds' => $request->duration_seconds,
+                'explanation' => $request->explanation,
+            ]);
 
-            if ($request->hasFile('question_image')) {
-                // Hapus gambar lama jika perlu (opsional)
-                $dataToUpdate['question_image'] = $request->file('question_image')->store('questions', 'public');
-            }
-
-            $question->update($dataToUpdate);
-
-            // Hapus opsi lama & buat baru (Simplest approach)
-            $question->answerOptions()->delete();
-
+            // Update Opsi: Hapus semua lalu buat ulang (agar bersih dan mudah)
             if ($request->has('options')) {
-                foreach ($request->options as $index => $optionData) {
-                    // ... (Logika simpan opsi sama seperti di store) ...
-                    $optionImagePath = null;
-                    if (isset($optionData['option_image']) && $optionData['option_image'] instanceof \Illuminate\Http\UploadedFile) {
-                        $optionImagePath = $optionData['option_image']->store('options', 'public');
-                    } elseif (isset($optionData['image_url'])) {
-                        // Keep old image if sent back as URL (optional logic)
-                        $optionImagePath = str_replace(url('storage').'/', '', $optionData['image_url']);
-                    }
-
-                    $label = $request->type === 'short' ? null : chr(65 + $index);
-
+                $question->answerOptions()->delete();
+                
+                foreach ($request->options as $opt) {
                     $question->answerOptions()->create([
-                        'option_label' => $label,
-                        'option_text' => $optionData['option_text'] ?? '',
-                        'option_image' => $optionImagePath,
-                        'is_correct' => filter_var($optionData['is_correct'], FILTER_VALIDATE_BOOLEAN),
-                        'weight' => $optionData['weight'] ?? 0,
+                        'option_label' => $opt['label'] ?? null,
+                        'option_text' => $opt['option_text'] ?? $opt['text'] ?? '',
+                        'is_correct' => $opt['is_correct'] ?? false,
+                        'weight' => $opt['weight'] ?? 0,
                     ]);
                 }
             }
 
             DB::commit();
-            return response()->json(['success' => true, 'message' => 'Soal berhasil diperbarui']);
+            return response()->json([
+                'success' => true, 
+                'message' => 'Soal berhasil diperbarui', 
+                'data' => $question->load('answerOptions')
+            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal update: ' . $e->getMessage()], 500);
         }
     }
 
     public function destroy($packageId, $id)
     {
         $question = Question::where('question_package_id', $packageId)->findOrFail($id);
-        $package = $question->questionPackage;
-
+        
         DB::beginTransaction();
         try {
-            $question->delete();
-            $package->decrement('total_questions');
-            
-            // Reorder questions
-            $questions = $package->questions()->orderBy('order_number')->get();
-            foreach ($questions as $index => $q) {
-                $q->update(['order_number' => $index + 1]);
-            }
+            $question->delete(); // Data opsi akan terhapus otomatis (Cascade di DB)
+
+            // [PERBAIKAN] HAPUS decrement total_questions karena kolom tidak ada
+            // $question->questionPackage->decrement('total_questions'); 
 
             DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Soal berhasil dihapus'
-            ]);
-
+            return response()->json(['success' => true, 'message' => 'Soal berhasil dihapus']);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghapus soal: ' . $e->getMessage()
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Gagal menghapus: ' . $e->getMessage()], 500);
         }
     }
 }

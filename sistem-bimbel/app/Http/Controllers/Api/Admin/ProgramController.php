@@ -90,19 +90,20 @@ class ProgramController extends Controller
     {
         $program = Program::findOrFail($id);
         
-        // Cek relasi untuk mencegah error integritas data
-        if ($program->students()->exists() || $program->questionPackages()->exists()) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Gagal hapus: Program sedang digunakan oleh siswa atau paket soal.'
-            ], 400);
-        }
+        // [PERBAIKAN] Hapus pengecekan relasi agar bisa dihapus paksa.
+        // Kita asumsikan Database sudah ON DELETE CASCADE.
+        // Jika tidak, kita bisa hapus manual relasinya di sini:
+        
+        // Opsional: Hapus relasi manual jika DB tidak cascade
+        $program->students()->delete(); 
+        $program->subjects()->delete();
+        $program->questionPackages()->delete();
 
         $program->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Program berhasil dihapus'
+            'message' => 'Program dan data terkait berhasil dihapus'
         ]);
     }
 }
