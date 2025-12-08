@@ -7,7 +7,7 @@ import {
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore'; // [WAJIB] Import AuthStore agar menu muncul
-import logoImage from '../../assets/logo.png'; // [WAJIB] Import Logo
+import logoImage from '../../assets/logo2.png'; // [WAJIB] Import Logo
 
 const menuItems = {
   // [PENTING] Key disesuaikan dengan role di database: 'admin_manajemen'
