@@ -15,6 +15,13 @@ export const API_ENDPOINTS = {
   TESTIMONIES: '/public/testimonies',
   FEATURES: '/public/features',
   FAQ: '/public/faq',
+  
+  
+  // [NEW] Endpoint Publik
+  PUBLIC_BLOG: '/public/blog',
+  PUBLIC_GALLERY: '/public/gallery',
+  PUBLIC_CONTENT_DETAIL: (id) => `/public/blog/${id}`, // Pastikan route ini ada di Laravel
+
 
   // Admin
   ADMIN_DASHBOARD: '/admin/dashboard',
@@ -30,6 +37,10 @@ export const API_ENDPOINTS = {
   FEEDBACKS: '/admin/feedbacks',
   ADMIN_ANNOUNCEMENTS: '/admin/announcements',
   ADMIN_SEND_CREDENTIALS: (id) => `/admin/students/${id}/send-credentials`,
+
+  // [NEW] Endpoint CRUD Admin (Satu endpoint resource untuk semua konten)
+  ADMIN_CONTENTS: '/admin/landing-contents',
+
 
   // Question Maker
   QUESTION_PACKAGES: '/question-maker/packages',

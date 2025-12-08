@@ -2,6 +2,9 @@
 import { Link } from 'react-router-dom';
 import { User, Menu, Image as ImageIcon, ZoomIn } from 'lucide-react';
 import { useState } from 'react';
+import logo from "../assets/logo2.png"; 
+
+
 
 // Mock Auth Store (Sesuaikan dengan store Anda)
 const useAuthStore = () => ({
@@ -31,7 +34,13 @@ export default function Gallery() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <h1 className="text-2xl font-extrabold text-blue-600">
-              <Link to="/">National Academy</Link>
+              <Link to="/">
+                    <img 
+                    src={logo} 
+                    alt="National Academy Logo"
+                    style={{ height: "40px" }} // bisa disesuaikan
+                    />
+              </Link>
             </h1>
             <div className="flex items-center space-x-6">
               <Link to="/gallery" className="text-blue-600 font-bold transition-colors">Galeri</Link>

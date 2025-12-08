@@ -2,7 +2,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Book, BookCopy, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
-  Clock, TrendingUp, X, Activity, Megaphone
+  Clock, TrendingUp, X, Activity, Megaphone, 
+  Image as ImageIcon // [NEW] Import icon untuk konten
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
@@ -21,6 +22,9 @@ const menuItems = {
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },
     { path: '/admin/students', icon: Users, label: 'Siswa' },
     { path: '/admin/monitoring', icon: Activity, label: 'Monitoring' },
+    
+    // [NEW] Menu Baru untuk CRUD Blog & Galeri
+    { path: '/admin/content-manager', icon: ImageIcon, label: 'Manajemen Konten' },
   ],
   
   // Key role: 'pembuat_soal'
