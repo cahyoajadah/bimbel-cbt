@@ -84,8 +84,10 @@ export default function BlogDetail() {
             )}
 
             {/* Body */}
-            <div className="prose prose-lg prose-blue mx-auto text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {post.content}
+            <div 
+              className="prose prose-lg prose-blue mx-auto text-gray-700 leading-relaxed ql-editor"
+              dangerouslySetInnerHTML={{ __html: post.content }}
+            >
             </div>
         </div>
       </article>

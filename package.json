@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "katex": "^0.16.27",
+    "react-quill": "^2.0.0"
+  }
+}

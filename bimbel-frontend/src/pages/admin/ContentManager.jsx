@@ -1,24 +1,33 @@
 // src/pages/admin/ContentManager.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Image as ImageIcon, FileText, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Image as ImageIcon, FileText } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
-import Modal from '../../components/common/Modal';
-import Input from '../../components/common/Input';
-import Button from '../../components/common/Button';
-import ConfirmDialog from '../../components/common/ConfirmDialog';
-import Table from '../../components/common/Table';
 import toast from 'react-hot-toast';
 
+// Components
+import { Modal } from '../../components/common/Modal';
+import { Input } from '../../components/common/Input';
+import { Button } from '../../components/common/Button';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { Table } from '../../components/common/Table';
+
+// Import React Quill & Styles
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css'; // Style editor
+import 'katex/dist/katex.min.css'; // Style untuk matematika
+import katex from 'katex'; 
+window.katex = katex; // Mount katex ke window agar dikenali Quill
+
 export default function ContentManager() {
-  const [activeTab, setActiveTab] = useState('blog'); // 'blog' or 'gallery'
+  const [activeTab, setActiveTab] = useState('blog'); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const queryClient = useQueryClient();
 
-  // --- Form State ---
+  // Form State
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -26,23 +35,44 @@ export default function ContentManager() {
     preview: null,
   });
 
-  // --- Fetch Data ---
+  // Konfigurasi Toolbar Editor Lengkap (Warna, Background, Align)
+  const modules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+      [{ 'color': [] }, { 'background': [] }], 
+      [{ 'align': [] }], 
+      [{'list': 'ordered'}, {'list': 'bullet'}],
+      ['link', 'image', 'formula'], 
+      ['clean']
+    ],
+  };
+
+  const formats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike', 'blockquote',
+    'color', 'background', 
+    'align', 
+    'list', 'bullet',
+    'link', 'image', 'formula'
+  ];
+
+  // Fetch Data
   const { data: contents, isLoading } = useQuery({
     queryKey: ['admin-contents', activeTab],
     queryFn: async () => {
-      // Fetch berdasarkan section (blog/gallery)
       const res = await api.get(`${API_ENDPOINTS.ADMIN_CONTENTS}?section=${activeTab}`);
       return res.data.data;
     },
   });
 
-  // --- Mutations ---
+  // Mutations
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const form = new FormData();
       form.append('section', activeTab);
       form.append('title', data.title);
-      form.append('content', data.content || ''); // Gallery mungkin null content
+      form.append('content', data.content || '');
       form.append('is_active', 1);
       if (data.image) form.append('image', data.image);
       
@@ -62,7 +92,6 @@ export default function ContentManager() {
   const updateMutation = useMutation({
     mutationFn: async (data) => {
       const form = new FormData();
-      // Method spoofing for Laravel PUT with File
       form.append('_method', 'PUT'); 
       form.append('title', data.title);
       form.append('content', data.content || '');
@@ -91,7 +120,7 @@ export default function ContentManager() {
     },
   });
 
-  // --- Handlers ---
+  // Handlers
   const resetForm = () => {
     setFormData({ title: '', content: '', image: null, preview: null });
     setSelectedItem(null);
@@ -128,11 +157,12 @@ export default function ContentManager() {
     }
   };
 
-  // --- Columns Config ---
+  // Columns Config
   const columns = [
     { 
         header: 'Gambar', 
-        accessor: (item) => (
+        accessor: 'image',
+        render: (item) => (
             item.image ? 
             <img src={`http://localhost:8000/storage/${item.image}`} alt="thumb" className="w-16 h-16 object-cover rounded" /> 
             : <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">No Img</div>
@@ -141,11 +171,13 @@ export default function ContentManager() {
     { header: 'Judul', accessor: 'title', className: 'font-medium' },
     { 
         header: 'Tanggal', 
-        accessor: (item) => new Date(item.created_at).toLocaleDateString('id-ID') 
+        accessor: 'created_at',
+        render: (item) => new Date(item.created_at).toLocaleDateString('id-ID') 
     },
     {
       header: 'Aksi',
-      accessor: (item) => (
+      accessor: 'id',
+      render: (item) => (
         <div className="flex space-x-2">
           <Button variant="secondary" size="sm" onClick={() => handleOpenModal(item)}>
             <Edit className="w-4 h-4" />
@@ -190,11 +222,12 @@ export default function ContentManager() {
 
       {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {isLoading ? (
-            <div className="p-8 text-center text-gray-500">Memuat data...</div>
-        ) : (
-            <Table columns={columns} data={contents || []} />
-        )}
+        <Table 
+            columns={columns} 
+            data={contents || []} 
+            loading={isLoading}
+            emptyMessage="Belum ada konten."
+        />
       </div>
 
       {/* Modal Form */}
@@ -202,6 +235,7 @@ export default function ContentManager() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={`${selectedItem ? 'Edit' : 'Tambah'} ${activeTab === 'blog' ? 'Blog' : 'Galeri'}`}
+        size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
@@ -211,23 +245,43 @@ export default function ContentManager() {
             required
           />
           
-          {/* Content hanya wajib untuk Blog */}
+          {/* Editor React Quill */}
           {activeTab === 'blog' && (
-              <div>
+              <div className="mb-12"> 
                 <label className="block text-sm font-medium text-gray-700 mb-1">Konten / Isi Artikel</label>
-                <textarea
-                    rows={6}
-                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
-                    value={formData.content}
-                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                    required
-                />
+                <div className="h-64"> 
+                    <ReactQuill 
+                        theme="snow"
+                        value={formData.content}
+                        onChange={(value) => setFormData({ ...formData, content: value })}
+                        modules={modules}
+                        formats={formats}
+                        className="h-56"
+                    />
+                </div>
               </div>
           )}
 
+          {/* [FIX] Tips Rumus (Diperbaiki agar tidak crash) */}
+          {activeTab === 'blog' && (
+            <div className="mt-8 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 border border-gray-200">
+                <p className="font-bold mb-1">Panduan Rumus Matematika (LaTeX):</p>
+                {/* [FIX] Gunakan tanda kutip dan kurung kurawal agar {a} tidak dianggap variabel */}
+                <ul className="grid grid-cols-2 gap-x-4 gap-y-1 list-disc pl-4">
+                  <li>Pecahan: <code className="bg-gray-200 px-1 rounded">{"\\frac{a}{b}"}</code> → {"$\\frac{a}{b}$"}</li>
+                  <li>Pangkat: <code className="bg-gray-200 px-1 rounded">{"x^2"}</code> → {"$x^2$"}</li>
+                  <li>Akar: <code className="bg-gray-200 px-1 rounded">{"\\sqrt{x}"}</code> → {"$\\sqrt{x}$"}</li>
+                  <li>Kali: <code className="bg-gray-200 px-1 rounded">{"\\times"}</code> → {"$\\times$"}</li>
+                </ul>
+                <p className="mt-2 text-gray-500">
+                Klik tombol <b>fx</b> di toolbar, lalu tempel kode di atas.
+                </p>
+            </div>
+          )}
+
           {/* Image Upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Gambar</label>
+          <div className="pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Gambar Cover</label>
             <div className="flex items-center space-x-4">
                 {formData.preview && (
                     <img src={formData.preview} alt="Preview" className="w-20 h-20 object-cover rounded border" />
@@ -241,12 +295,12 @@ export default function ContentManager() {
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
+          <div className="flex justify-end space-x-3 pt-6 border-t mt-4">
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
               Batal
             </Button>
-            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-              {createMutation.isPending || updateMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
+              Simpan
             </Button>
           </div>
         </form>
