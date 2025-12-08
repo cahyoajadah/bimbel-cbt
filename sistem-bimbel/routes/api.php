@@ -30,6 +30,11 @@ Route::prefix('public')->group(function () {
     Route::get('testimonies', [LandingController::class, 'testimonies']);
     Route::get('features', [LandingController::class, 'features']);
     Route::get('faq', [LandingController::class, 'faq']);
+
+    // [BARU] Route untuk Galeri dan Blog Publik
+    Route::get('gallery', [LandingController::class, 'gallery']);
+    Route::get('blog', [LandingController::class, 'blog']);
+    Route::get('blog/{id}', [LandingController::class, 'showBlog']); // Detail blog
 });
 
 // AUTH ROUTES
@@ -60,7 +65,7 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::apiResource('programs', ProgramController::class);
         Route::apiResource('teachers', TeacherController::class);
         Route::apiResource('announcements', AdminAnnouncement::class);
-        
+        Route::apiResource('landing-contents', \App\Http\Controllers\Api\Admin\LandingContentController::class);
         // Students
         Route::apiResource('students', StudentController::class);
         Route::get('students/{id}/programs', [StudentController::class, 'getPrograms']);

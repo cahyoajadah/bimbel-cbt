@@ -8,6 +8,8 @@ import { useAuthStore } from '../store/authStore';
 import Landing from '../pages/Landing';
 import Login from '../pages/Login';
 import NotFound from '../pages/NotFound';
+import Gallery from '../pages/Gallery'; // [NEW] Import Gallery
+import Blog from '../pages/Blog';       // [NEW] Import Blog
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
@@ -83,6 +85,9 @@ function AppRoutes() {
                     <Route path="announcements" element={<AdminAnnouncements />} />
                     <Route path="teachers" element={<AdminTeachers />} />
                     <Route path="students" element={<AdminStudents />} />
+                    {/* [NEW] Public Pages Accessible by Everyone */}
+                    <Route path="/gallery" element={<Gallery />} />
+                    <Route path="/blog" element={<Blog />} />
                     {/* [UPDATE] Path diubah menjadi 'monitoring' agar sesuai dengan Sidebar & Dashboard */}
                     <Route path="monitoring" element={<AdminMonitoring />} /> 
                     <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />

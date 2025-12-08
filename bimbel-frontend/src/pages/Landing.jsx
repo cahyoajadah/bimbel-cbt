@@ -202,18 +202,25 @@
 
 // src/pages/Landing.jsx
 import { Link } from 'react-router-dom';
-import { CheckCircle, BookOpen, Video, Award, ArrowRight, ChevronDown, User, ArrowLeft, ArrowRight as ArrowRightIcon, Zap } from 'lucide-react'; // Diperbarui
+import { 
+  CheckCircle, 
+  BookOpen, 
+  Video, 
+  Award, 
+  ArrowRight, 
+  ChevronDown, 
+  User as UserIcon, // [FIX] Di-alias agar tidak bentrok
+  ArrowLeft, 
+  ArrowRight as ArrowRightIcon, 
+  Zap 
+} from 'lucide-react'; 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react'; 
 import api from '../api/axiosConfig';
 import { API_ENDPOINTS } from '../api/endpoints';
 
-// *ASUMSI: Mengambil state otentikasi dari store (misal: src/store/authStore.js)
-// Karena file store tidak diakses, ini adalah MOCK/ASUMSI agar fitur login berfungsi:
-const useAuthStore = () => ({
-  isLoggedIn: true, // Ganti dengan logika sebenarnya
-  user: { role: 'admin' }, // Ganti dengan data user sebenarnya
-});
+// [FIX] Import store asli, hapus kode Mock lama
+import { useAuthStore } from '../store/authStore';
 
 // --- Constants ---
 const TESTIMONIALS_PER_PAGE = 3;
@@ -230,7 +237,6 @@ const DUMMY_CONTENT = {
     { id: 2, title: 'Tryout Berbasis CBT', content: 'Simulasi ujian Computer Based Test (CBT) yang akurat dan mirip dengan aslinya untuk mengukur kesiapanmu. Quisque vel efficitur leo. (Kelola di Admin)' },
     { id: 3, title: 'Pembahasan Soal Interaktif', content: 'Video pembahasan dan penjelasan mendalam untuk setiap soal yang kamu kerjakan. Sed euismod urna eget lorem pulvinar. (Kelola di Admin)' },
   ],
-  // Tambahkan lebih banyak dummy untuk menguji pagination
   TESTIMONIES: [
     { id: 1, title: 'Andi P. - Lulus UTBK 2024', content: '"Sistem belajarnya sangat terstruktur dan mentornya profesional. Saya berhasil masuk ke kampus impian saya. Terima kasih National Academy!" (Kelola di Admin)' },
     { id: 2, title: 'Budi S. - Lulus SKD CPNS', content: '"Latihan soalnya sangat relevan. Nilai SKD saya sangat memuaskan, bahkan melebihi target yang saya tetapkan. Rekomendasi banget!" (Kelola di Admin)' },
@@ -269,12 +275,12 @@ const FAQItem = ({ title, content }) => {
 
 // Komponen Utama
 export default function Landing() {
-  // Ambil status login dan role
-  const { isLoggedIn, user } = useAuthStore();
+  // [FIX] Mengambil status login dari store asli
+  const { isAuthenticated, user } = useAuthStore();
   
   // Tentukan path profil berdasarkan role
-  const profilePath = isLoggedIn 
-    ? (user.role === 'admin' ? '/admin/dashboard' : '/student/profile')
+  const profilePath = isAuthenticated 
+    ? (user?.role === 'admin_manajemen' ? '/admin/dashboard' : (user?.role === 'pembuat_soal' ? '/question-maker/dashboard' : '/student/profile'))
     : '/login';
 
   // --- Data Fetching ---
@@ -339,20 +345,24 @@ export default function Landing() {
       setCurrentPage(currentPage - 1);
     }
   };
-  // --- Akhir Logic Pagination ---
 
 
   return (
     <div className="min-h-screen bg-white text-gray-800">
-      {/* Navigation - Perubahan tombol Login/Profile */}
+      {/* Navigation */}
       <nav className="fixed w-full bg-white/95 backdrop-blur-sm z-50 border-b border-gray-100/70 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <h1 className="text-2xl font-extrabold text-blue-600">
-              {/* NEW: Link ke dashboard jika login, atau tetap di Beranda */}
-              <Link to={isLoggedIn ? profilePath : "/"}>National Academy</Link>
+              <Link to={isAuthenticated ? profilePath : "/"}>National Academy</Link>
             </h1>
             <div className="flex items-center space-x-6">
+              <Link 
+                to="/gallery"
+                className="text-gray-600 font-medium hover:text-blue-600 transition-colors hidden sm:block"
+              >
+                Galeri
+              </Link>
               <Link 
                 to="/blog"
                 className="text-gray-600 font-medium hover:text-blue-600 transition-colors hidden sm:block"
@@ -360,27 +370,25 @@ export default function Landing() {
                 Blog
               </Link>
               
-              {/* NEW: Tombol Profile / Login */}
               <Link
                 to={profilePath}
                 className={`px-6 py-2 rounded-full font-medium transition-all duration-300 flex items-center ${
-                  isLoggedIn 
+                  isAuthenticated 
                     ? 'bg-white text-blue-600 border border-blue-600 hover:bg-blue-50 shadow-md'
                     : 'bg-blue-600 text-white shadow-lg hover:bg-blue-700'
                 }`}
               >
-                <User className="w-5 h-5 mr-2" />
-                {isLoggedIn ? (user.role === 'admin' ? 'Dashboard' : 'Profile') : 'Login'}
+                {/* [FIX] Gunakan Alias UserIcon */}
+                <UserIcon className="w-5 h-5 mr-2" />
+                {isAuthenticated ? (user?.role === 'admin_manajemen' ? 'Dashboard' : 'Profile') : 'Login'}
               </Link>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section - Ambient Light, Dummy Image, & Placeholder Text */}
-      {/* (Unchanged from previous response, uses DUMMY_CONTENT) */}
+      {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden bg-white">
-        {/* Background Ambient Effect */}
         <div className="absolute inset-0 z-0 opacity-20" style={{
           backgroundImage: `radial-gradient(at 0% 0%, #dbeafe 0, transparent 50%), radial-gradient(at 100% 100%, #e0f2f1 0, transparent 50%)`,
         }}></div>
@@ -490,7 +498,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Testimonials - Ambient Background + Dummy Image + Pagination */}
+      {/* Testimonials */}
       <section className="py-24 bg-indigo-50/50 px-4 sm:px-6 lg:px-8 border-y border-indigo-100/50">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
