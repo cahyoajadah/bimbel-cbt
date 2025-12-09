@@ -29,7 +29,12 @@ class CBTController extends Controller
             ->whereIn('program_id', $studentProgramIds)
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($pkg) {
+            ->map(function ($pkg) use ($student) {
+                // [BARU] Hitung jumlah pengerjaan siswa untuk paket ini
+                $attemptsCount = StudentTryoutResult::where('student_id', $student->id)
+                    ->where('question_package_id', $pkg->id)
+                    ->count();
+
                 return [
                     'id' => $pkg->id,
                     'name' => $pkg->name,
@@ -38,7 +43,11 @@ class CBTController extends Controller
                     'total_questions' => $pkg->questions->count(),
                     'duration_minutes' => $pkg->duration_minutes,
                     'passing_score' => $pkg->passing_score,
-                    'already_attempted' => false,
+                    
+                    // [BARU] Data batasan dikirim ke frontend
+                    'max_attempts' => $pkg->max_attempts,
+                    'user_attempts_count' => $attemptsCount,
+                    'already_attempted' => $attemptsCount > 0, // Update logika ini sekalian
                 ];
             });
 
@@ -52,6 +61,19 @@ class CBTController extends Controller
 
         if (!$package->is_active) {
             return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
+        }
+
+        if (!is_null($package->max_attempts)) {
+            $attemptCount = StudentTryoutResult::where('student_id', $student->id)
+                ->where('question_package_id', $package->id)
+                ->count();
+
+            if ($attemptCount >= $package->max_attempts) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => "Kuota pengerjaan habis. Batas maksimal: {$package->max_attempts} kali."
+                ], 403);
+            }
         }
 
         $ongoingSession = CbtSession::where('student_id', $student->id)

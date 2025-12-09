@@ -34,7 +34,7 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
-            // [BARU] Validasi Tanggal
+            'max_attempts' => 'nullable|integer|min:1',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'is_active' => 'boolean',
@@ -76,7 +76,7 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
-            // [BARU] Validasi Tanggal
+            'max_attempts' => 'nullable|integer|min:1',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
             'is_active' => 'boolean',

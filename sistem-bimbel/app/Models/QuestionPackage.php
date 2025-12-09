@@ -17,8 +17,9 @@ class QuestionPackage extends Model
         'description',
         'duration_minutes',
         'passing_score',
-        'start_date', // [BARU]
-        'end_date',   // [BARU]
+        'max_attempts',
+        'start_date',
+        'end_date',   
         'is_active'
     ];
 

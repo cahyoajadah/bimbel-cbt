@@ -30,7 +30,7 @@ export default function QuestionPackages() {
 
   const packages = packagesData?.data || []; 
 
-  // Fetch Programs (Gunakan endpoint umum)
+  // Fetch Programs
   const { data: programs } = useQuery({
     queryKey: ['common-programs'], 
     queryFn: async () => {
@@ -90,6 +90,9 @@ export default function QuestionPackages() {
       setValue('duration_minutes', pkg.duration_minutes);
       setValue('passing_score', pkg.passing_score);
       
+      // [MODIFIED] Set nilai max_attempts
+      setValue('max_attempts', pkg.max_attempts);
+      
       setValue('start_date', pkg.start_date ? pkg.start_date.split('T')[0] : '');
       setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');
       
@@ -100,6 +103,7 @@ export default function QuestionPackages() {
           is_active: true, 
           duration_minutes: 120, 
           passing_score: 65,
+          max_attempts: '', // Default kosong (unlimited)
           start_date: '',
           end_date: ''
       });
@@ -121,6 +125,11 @@ export default function QuestionPackages() {
     const payload = { ...data };
     if (!payload.start_date) payload.start_date = null;
     if (!payload.end_date) payload.end_date = null;
+    
+    // [MODIFIED] Handle max_attempts: kosong string/0 menjadi null
+    if (!payload.max_attempts || payload.max_attempts == 0) {
+        payload.max_attempts = null;
+    }
 
     if (editingPackage) {
       updateMutation.mutate({ id: editingPackage.id, data: payload });
@@ -140,20 +149,13 @@ export default function QuestionPackages() {
       )
     },
     { header: 'Durasi', accessor: 'duration_minutes', render: (row) => `${row.duration_minutes} Menit` },
+    // [NEW] Kolom Batas Pengerjaan (Opsional, agar admin bisa lihat di tabel)
     { 
-      header: 'Periode Aktif', 
+      header: 'Limit', 
       render: (row) => (
-        <div className="text-xs">
-            {row.start_date ? (
-                <div className="flex items-center gap-1 text-gray-700">
-                    <Calendar size={12} />
-                    {new Date(row.start_date).toLocaleDateString('id-ID')} - 
-                    {row.end_date ? new Date(row.end_date).toLocaleDateString('id-ID') : 'Seterusnya'}
-                </div>
-            ) : (
-                <span className="text-gray-400 italic">Selalu Aktif</span>
-            )}
-        </div>
+        <span className="text-xs font-medium text-gray-600">
+            {row.max_attempts ? `${row.max_attempts}x` : '∞'}
+        </span>
       )
     },
     { 
@@ -168,34 +170,13 @@ export default function QuestionPackages() {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-2">
-          {/* TOMBOL SOAL */}
-          <Button 
-            size="sm" 
-            variant="outline" 
-            icon={List} 
-            onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)}
-          >
+          <Button size="sm" variant="outline" icon={List} onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)}>
             Soal
           </Button>
-          
-          {/* TOMBOL EDIT (DENGAN TEKS) */}
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            icon={Edit} 
-            onClick={() => handleOpenModal(row)}
-          >
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>
             Edit
           </Button>
-
-          {/* TOMBOL HAPUS (DENGAN TEKS) */}
-          <Button 
-            size="sm" 
-            variant="ghost" 
-            icon={Trash2} 
-            onClick={() => handleDelete(row)} 
-            className="text-red-600 hover:bg-red-50"
-          >
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50">
             Hapus
           </Button>
         </div>
@@ -245,6 +226,20 @@ export default function QuestionPackages() {
                 label="KKM / Passing Score" 
                 {...register('passing_score', { required: true, min: 0 })} 
             />
+          </div>
+
+          {/* [NEW] Input Batas Pengerjaan */}
+          <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
+            <Input 
+                type="number" 
+                label="Batas Pengerjaan (Kali)" 
+                placeholder="Kosongkan jika unlimited"
+                {...register('max_attempts', { min: 1 })} 
+                className="bg-white"
+            />
+            <p className="text-xs text-yellow-800 mt-1">
+                * Kosongkan atau isi 0 jika siswa diperbolehkan mengerjakan berulang kali tanpa batas.
+            </p>
           </div>
 
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
