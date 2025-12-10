@@ -3,11 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
-import { CheckCircle, XCircle, ArrowLeft, Clock, Award, CheckSquare, Square, AlertTriangle, Info, Flag, MessageSquare, Check } from 'lucide-react';
+import { CheckCircle, XCircle, ArrowLeft, Clock, Award, CheckSquare, Square, AlertTriangle, Info, Flag, MessageSquare } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+
+// [FIX] Import CSS untuk styling konten HTML (Rumus & Text Editor)
+import 'katex/dist/katex.min.css'; 
+import 'react-quill/dist/quill.snow.css'; 
 
 export default function TryoutReview() {
   const { resultId } = useParams();
@@ -62,6 +66,7 @@ export default function TryoutReview() {
   const renderAnswerReview = (q) => {
     if (q.type === 'short') {
         const myAns = q.answer_text || "-";
+        // Kunci jawaban isian singkat biasanya plain text, tapi kita ambil aman
         const keyAns = q.options.find(o => o.is_correct)?.text || "-";
         const isCorrect = parseFloat(q.point_earned) === parseFloat(q.point_max);
 
@@ -130,8 +135,8 @@ export default function TryoutReview() {
                 );
 
                 return (
-                    <div key={opt.id} className={`flex items-center p-3 rounded-lg border ${style} transition-all`}>
-                        <div className="flex-shrink-0 mr-3">
+                    <div key={opt.id} className={`flex items-start p-3 rounded-lg border ${style} transition-all`}>
+                        <div className="flex-shrink-0 mr-3 mt-0.5">
                             {q.type === 'multiple' ? (
                                 isSelected ? <CheckSquare size={20} className="text-blue-600"/> : <Square size={20} className="text-gray-400"/>
                             ) : (
@@ -140,11 +145,15 @@ export default function TryoutReview() {
                                 </div>
                             )}
                         </div>
-                        <div className="flex-1 text-sm text-gray-900 font-medium">
-                            {opt.text}
-                            {opt.image && <img src={opt.image} alt="Opsi" className="mt-2 max-h-20 rounded border" />}
+                        {/* [FIX] Render Opsi Jawaban HTML */}
+                        <div className="flex-1 text-sm text-gray-900 font-medium min-w-0">
+                            <div 
+                                className="ql-editor !p-0 prose max-w-none"
+                                dangerouslySetInnerHTML={{ __html: opt.text }}
+                            />
+                            {opt.image && <img src={opt.image} alt="Opsi" className="mt-2 max-h-40 rounded border shadow-sm bg-white" />}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 ml-2 shrink-0">
                             {pointBadge}
                             {statusBadge}
                         </div>
@@ -256,14 +265,15 @@ export default function TryoutReview() {
                     </div>
 
                     <div className="p-6">
-                        <div className="prose max-w-none text-gray-800 text-lg mb-6">
-                            <p className="whitespace-pre-wrap leading-relaxed">{q.question_text}</p>
+                        {/* [FIX] Render Soal HTML */}
+                        <div className="prose max-w-none text-gray-800 text-lg mb-6 ql-editor">
+                            <div dangerouslySetInnerHTML={{ __html: q.question_text }} />
                             {q.question_image && <img src={q.question_image} className="mt-4 rounded-lg border max-h-96" alt="Soal" />}
                         </div>
 
                         {renderAnswerReview(q)}
 
-                        {/* [BARU] STATUS LAPORAN & BALASAN ADMIN */}
+                        {/* STATUS LAPORAN & BALASAN ADMIN */}
                         {q.user_report && (
                             <div className={clsx(
                                 "mt-6 p-4 rounded-lg border flex gap-3 items-start",
@@ -287,7 +297,7 @@ export default function TryoutReview() {
                             </div>
                         )}
 
-                        {/* PEMBAHASAN */}
+                        {/* [FIX] Render Pembahasan HTML */}
                         <div className="mt-8 pt-6 border-t border-gray-100">
                             <div className="bg-indigo-50/80 rounded-xl p-5 border border-indigo-100">
                                 <h4 className="text-indigo-900 font-bold flex items-center gap-2 mb-2">
@@ -295,9 +305,10 @@ export default function TryoutReview() {
                                     Pembahasan:
                                 </h4>
                                 {q.discussion && q.discussion.trim() !== "" ? (
-                                    <p className="text-indigo-800 text-sm leading-relaxed whitespace-pre-wrap pl-7">
-                                        {q.discussion}
-                                    </p>
+                                    <div 
+                                        className="text-indigo-800 text-sm leading-relaxed pl-7 ql-editor"
+                                        dangerouslySetInnerHTML={{ __html: q.discussion }} 
+                                    />
                                 ) : (
                                     <p className="text-gray-400 text-sm italic pl-7">Belum ada pembahasan untuk soal ini.</p>
                                 )}
@@ -339,6 +350,34 @@ export default function TryoutReview() {
              </div>
          </div>
       </Modal>
+
+      {/* Global CSS untuk Image Responsive & Style Editor */}
+      <style>{`
+        .ql-editor img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: block;
+        }
+        .ql-editor p {
+            margin-bottom: 0.5em;
+        }
+        /* Hapus padding editor agar sejajar di list opsi */
+        .ql-editor {
+            height: auto !important;
+        }
+        .ql-editor.p-0 {
+            padding: 0 !important;
+        }
+        /* Hapus margin atas paragraf pertama agar sejajar bullet point */
+        .ql-editor p:first-child {
+            margin-top: 0;
+        }
+        .ql-editor p:last-child {
+            margin-bottom: 0;
+        }
+      `}</style>
     </div>
   );
 }

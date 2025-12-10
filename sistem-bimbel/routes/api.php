@@ -3,6 +3,7 @@
 // routes/api.php
 // ============================================
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Api\Admin\PackageController;
@@ -144,4 +145,5 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('subjects', function () {
         return response()->json(['success' => true, 'data' => \App\Models\Subject::with('program')->get()]);
     });
+    Route::post('/upload-image', [UploadController::class, 'uploadImage']);
 });

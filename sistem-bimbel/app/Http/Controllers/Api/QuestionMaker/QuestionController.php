@@ -14,7 +14,13 @@ class QuestionController extends Controller
     public function index($packageId)
     {
         $package = QuestionPackage::findOrFail($packageId);
-        $questions = $package->questions()->orderBy('order_number')->get();
+        
+        // [FIX] Tambahkan with('answerOptions') di sini!
+        // Tanpa ini, frontend tidak akan menerima data opsi jawaban saat tombol Edit ditekan
+        $questions = $package->questions()
+                             ->with('answerOptions') 
+                             ->orderBy('order_number')
+                             ->get();
 
         return response()->json([
             'success' => true,
@@ -61,16 +67,12 @@ class QuestionController extends Controller
                 foreach ($request->options as $opt) {
                     $question->answerOptions()->create([
                         'option_label' => $opt['label'] ?? null,
-                        // Handle kemungkinan nama key berbeda dari frontend
                         'option_text' => $opt['option_text'] ?? $opt['text'] ?? '', 
                         'is_correct' => $opt['is_correct'] ?? false,
                         'weight' => $opt['weight'] ?? 0,
                     ]);
                 }
             }
-
-            // [PERBAIKAN] HAPUS increment total_questions karena kolom tidak ada
-            // $package->increment('total_questions'); 
 
             DB::commit();
 
@@ -120,7 +122,7 @@ class QuestionController extends Controller
                 'explanation' => $request->explanation,
             ]);
 
-            // Update Opsi: Hapus semua lalu buat ulang (agar bersih dan mudah)
+            // Update Opsi: Hapus semua lalu buat ulang
             if ($request->has('options')) {
                 $question->answerOptions()->delete();
                 
@@ -153,11 +155,7 @@ class QuestionController extends Controller
         
         DB::beginTransaction();
         try {
-            $question->delete(); // Data opsi akan terhapus otomatis (Cascade di DB)
-
-            // [PERBAIKAN] HAPUS decrement total_questions karena kolom tidak ada
-            // $question->questionPackage->decrement('total_questions'); 
-
+            $question->delete(); 
             DB::commit();
             return response()->json(['success' => true, 'message' => 'Soal berhasil dihapus']);
         } catch (\Exception $e) {

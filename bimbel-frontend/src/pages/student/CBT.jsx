@@ -14,6 +14,10 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import screenfull from 'screenfull';
 
+// Import CSS Katex & Quill untuk styling konten soal
+import 'katex/dist/katex.min.css'; 
+import 'react-quill/dist/quill.snow.css';
+
 export default function CBT() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
@@ -66,7 +70,7 @@ export default function CBT() {
     },
     onError: () => {
       setAutoSaving(false);
-      toast.error('Gagal menyimpan jawaban (Cek koneksi)');
+      // toast.error('Gagal menyimpan jawaban (Cek koneksi)');
     },
   });
 
@@ -105,12 +109,7 @@ export default function CBT() {
 
     const questionId = currentQ.id;
     
-    if (qType !== 'short') { 
-        saveAnswer(questionId, value);
-    } else {
-        saveAnswer(questionId, value);
-    }
-    
+    saveAnswer(questionId, value);
     setAutoSaving(true);
 
     const payload = { question_id: questionId };
@@ -259,7 +258,6 @@ export default function CBT() {
                         onChange={(e) => setTextAnswer(e.target.value)}
                         onBlur={(e) => handleAnswerChange('short', e.target.value)}
                     />
-                    {/* ICON SAVE DIHAPUS DI SINI */}
                 </div>
                 <div className="mt-2 flex justify-end">
                     {isAutoSaving ? (
@@ -316,10 +314,24 @@ export default function CBT() {
                                 : (isSelected ? <CheckCircle2 size={24} className="text-white" /> : <Circle size={24} />)
                             }
                         </div>
-                        <div className="flex-1 pt-1">
-                            <div className="flex gap-2">
-                                {opt.label && <span className={clsx("font-bold min-w-[1.5rem]", isSelected ? "text-white" : "text-gray-700")}>{opt.label}.</span>}
-                                <div className={clsx("leading-relaxed font-medium", isSelected ? "text-white" : "text-gray-800")}>{opt.text}</div>
+                        <div className="flex-1 pt-1 min-w-0">
+                            <div className="flex gap-2 items-start">
+                                {opt.label && (
+                                    <span className={clsx(
+                                        "font-bold min-w-[1.5rem] mt-0.5", 
+                                        isSelected ? "text-white" : "text-gray-700"
+                                    )}>
+                                        {opt.label}.
+                                    </span>
+                                )}
+                                {/* [FIX] Render Opsi Jawaban HTML dengan Alignment yang Benar */}
+                                <div 
+                                    className={clsx(
+                                        "leading-relaxed font-medium prose max-w-none ql-editor !p-0", 
+                                        isSelected ? "text-white prose-invert" : "text-gray-800"
+                                    )}
+                                    dangerouslySetInnerHTML={{ __html: opt.text }}
+                                />
                             </div>
                             {opt.image && <img src={opt.image} alt="Opsi" className="mt-3 max-h-40 rounded-lg border border-gray-200 shadow-sm bg-white" />}
                         </div>
@@ -331,7 +343,7 @@ export default function CBT() {
   };
 
   if (isLoading) return <div className="flex justify-center items-center h-screen bg-gray-50">Memuat Soal...</div>;
-  if (!questions || questions.length === 0) return <div className="p-10 text-center bg-gray-50 h-screen">Soal tidak ditemukan.</div>;
+  if (!questions || questions.length === 0) return <div className="p-10 text-center bg-gray-50 h-screen">Soal tidak ditemukan atau terjadi kesalahan.</div>;
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = getProgress();
@@ -359,9 +371,7 @@ export default function CBT() {
               </div>
             )}
             <div className="flex items-center gap-2">
-                {/* Indikator Global Loading */}
                 {isAutoSaving && <RefreshCw size={18} className="animate-spin text-blue-600" />}
-                
                 <Button variant="success" onClick={handlePreSubmitCheck} loading={submitMutation.isPending} className="shadow-sm rounded-xl px-6">
                 Selesai
                 </Button>
@@ -394,10 +404,12 @@ export default function CBT() {
             
             {/* Question Body */}
             <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
-               <div className="prose max-w-none mb-8">
-                  <p className="text-lg md:text-xl text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">
-                    {currentQuestion.question_text}
-                  </p>
+               {/* [FIX] Render Soal HTML */}
+               <div className="prose max-w-none mb-8 ql-editor">
+                  <div 
+                    className="text-lg md:text-xl text-gray-800 leading-relaxed font-medium"
+                    dangerouslySetInnerHTML={{ __html: currentQuestion.question_text }}
+                  />
                   {currentQuestion.question_image && (
                     <img 
                         src={currentQuestion.question_image} 
@@ -534,6 +546,27 @@ export default function CBT() {
           </div>
         </div>
       )}
+
+      {/* CSS Fixes */}
+      <style>{`
+        .ql-editor img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 10px 0;
+            display: block;
+        }
+        .ql-editor {
+            height: auto !important;
+        }
+        /* Hapus margin atas paragraf pertama di opsi agar sejajar dengan label */
+        .ql-editor p:first-child {
+            margin-top: 0;
+        }
+        .ql-editor p:last-child {
+            margin-bottom: 0;
+        }
+      `}</style>
     </div>
   );
 }

@@ -13,14 +13,19 @@ use Illuminate\Support\Str;
 
 class CBTController extends Controller
 {
+    // [FIX] Helper function untuk cek siswa
+    private function getStudentOrAbort(Request $request)
+    {
+        $student = $request->user()->student;
+        if (!$student) {
+            abort(response()->json(['message' => 'Akun ini bukan akun siswa yang valid'], 403));
+        }
+        return $student;
+    }
+
     public function availableTryouts(Request $request)
     {
-        $user = $request->user();
-        $student = $user->student;
-
-        if (!$student) {
-            return response()->json(['message' => 'Data siswa tidak ditemukan'], 404);
-        }
+        $student = $this->getStudentOrAbort($request);
 
         $studentProgramIds = $student->programs()->pluck('programs.id');
 
@@ -30,7 +35,6 @@ class CBTController extends Controller
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($pkg) use ($student) {
-                // [BARU] Hitung jumlah pengerjaan siswa untuk paket ini
                 $attemptsCount = StudentTryoutResult::where('student_id', $student->id)
                     ->where('question_package_id', $pkg->id)
                     ->count();
@@ -43,11 +47,9 @@ class CBTController extends Controller
                     'total_questions' => $pkg->questions->count(),
                     'duration_minutes' => $pkg->duration_minutes,
                     'passing_score' => $pkg->passing_score,
-                    
-                    // [BARU] Data batasan dikirim ke frontend
                     'max_attempts' => $pkg->max_attempts,
                     'user_attempts_count' => $attemptsCount,
-                    'already_attempted' => $attemptsCount > 0, // Update logika ini sekalian
+                    'already_attempted' => $attemptsCount > 0,
                 ];
             });
 
@@ -56,7 +58,7 @@ class CBTController extends Controller
 
     public function startSession(Request $request, $packageId)
     {
-        $student = $request->user()->student;
+        $student = $this->getStudentOrAbort($request);
         $package = QuestionPackage::findOrFail($packageId);
 
         if (!$package->is_active) {
@@ -127,16 +129,18 @@ class CBTController extends Controller
     public function getQuestions(Request $request)
     {
         $session = $request->cbt_session;
-        
+        if (!$session) return response()->json(['message' => 'Sesi tidak valid'], 401);
+
+        // [FIX] Pastikan relation answerOptions diload
         $questions = $session->questionPackage->questions()
-            ->with(['answerOptions'])
+            ->with(['answerOptions']) 
             ->orderBy('order_number')
             ->get()
             ->map(function($question) {
                 return [
                     'id' => $question->id,
                     'order_number' => $question->order_number,
-                    'type' => $question->type, // PENTING: Kirim tipe soal
+                    'type' => $question->type,
                     'point' => $question->point,
                     'question_text' => $question->question_text,
                     'question_image' => $question->question_image,
@@ -145,7 +149,8 @@ class CBTController extends Controller
                         return [
                             'id' => $option->id,
                             'label' => $option->option_label,
-                            'text' => $option->option_text, // Pastikan ini terisi di DB
+                            // [FIX] Pastikan field text selalu terisi untuk menghindari null di frontend
+                            'text' => $option->option_text ?? '', 
                             'image' => $option->option_image,
                         ];
                     }),
@@ -196,13 +201,11 @@ class CBTController extends Controller
                 $point = 0;
                 $isCorrect = false;
 
-                // Cek apakah dijawab
                 if ($ans->answer_option_id || $ans->answer_text || !empty($ans->selected_options)) {
                     $answeredCount++;
                 }
 
                 if ($q->type === 'weighted') {
-                    // SKD
                     if ($ans->answer_option_id) {
                         $selectedOpt = $q->answerOptions->where('id', $ans->answer_option_id)->first();
                         $point = $selectedOpt ? $selectedOpt->weight : 0;
@@ -210,7 +213,6 @@ class CBTController extends Controller
                         $isCorrect = $point == $maxWeight;
                     }
                 } elseif ($q->type === 'multiple') {
-                    // KOMPLEKS (Partial Score)
                     if (!empty($ans->selected_options)) {
                         $correctIds = $q->answerOptions->where('is_correct', true)->pluck('id')->toArray();
                         $studentIds = $ans->selected_options;
@@ -225,7 +227,6 @@ class CBTController extends Controller
                         $isCorrect = ($point == $q->point);
                     }
                 } elseif ($q->type === 'short') {
-                    // ISIAN
                     if ($ans->answer_text) {
                         $key = $q->answerOptions->where('is_correct', true)->first();
                         if ($key && strtolower(trim($ans->answer_text)) === strtolower(trim($key->option_text))) {
@@ -234,7 +235,6 @@ class CBTController extends Controller
                         }
                     }
                 } else {
-                    // SINGLE
                     if ($ans->answer_option_id) {
                         $isCorrect = $ans->answerOption && $ans->answerOption->is_correct;
                         if ($isCorrect) $point = $q->point;
@@ -278,12 +278,11 @@ class CBTController extends Controller
 
     public function reviewResult(Request $request, $resultId)
     {
-        $student = $request->user()->student;
+        $student = $this->getStudentOrAbort($request);
         
         $result = StudentTryoutResult::with([
             'cbtSession.answers.question.answerOptions',
             'cbtSession.answers.answerOption',
-            // [BARU] Eager load laporan soal dari siswa ini untuk paket ini
             'cbtSession.answers.question.reports' => function($q) use ($student) {
                 $q->where('student_id', $student->id);
             }
@@ -293,8 +292,6 @@ class CBTController extends Controller
 
         $formattedQuestions = $result->cbtSession->answers->map(function($answer) {
             $question = $answer->question;
-            
-            // [BARU] Ambil laporan terakhir siswa untuk soal ini (jika ada)
             $myReport = $question->reports->first(); 
 
             return [
@@ -305,21 +302,16 @@ class CBTController extends Controller
                 'question_text' => $question->question_text,
                 'question_image' => $question->question_image,
                 'discussion' => $question->explanation,
-                
-                // Data Jawaban
                 'student_answer_id' => $answer->answer_option_id,
                 'answer_text' => $answer->answer_text,
                 'selected_options' => $answer->selected_options,
                 'point_earned' => $answer->point_earned,
-                
-                // [BARU] Data Laporan
                 'user_report' => $myReport ? [
-                    'status' => $myReport->status,             // pending / resolved
-                    'content' => $myReport->report_content,    // Isi aduan siswa
-                    'response' => $myReport->admin_response,   // Balasan admin
+                    'status' => $myReport->status,
+                    'content' => $myReport->report_content,
+                    'response' => $myReport->admin_response,
                     'date' => $myReport->created_at->format('d M Y'),
                 ] : null,
-
                 'options' => $question->answerOptions->map(function($option) {
                     return [
                         'id' => $option->id,
@@ -352,7 +344,7 @@ class CBTController extends Controller
 
     public function reportQuestion(Request $request)
     {
-        $student = $request->user()->student;
+        $student = $this->getStudentOrAbort($request);
         $request->validate([
             'question_id' => 'required|exists:questions,id',
             'report_content' => 'required|string',
