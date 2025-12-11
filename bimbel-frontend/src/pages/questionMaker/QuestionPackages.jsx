@@ -94,13 +94,10 @@ export default function QuestionPackages() {
       setValue('max_attempts', pkg.max_attempts);
       
       setValue('start_date', pkg.start_date ? pkg.start_date.split('T')[0] : '');
-      setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');
-      
-      setValue('is_active', pkg.is_active);
+      setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');      
     } else {
       setEditingPackage(null);
       reset({ 
-          is_active: true, 
           duration_minutes: 120, 
           passing_score: 65,
           max_attempts: '', // Default kosong (unlimited)
@@ -122,11 +119,12 @@ export default function QuestionPackages() {
   };
 
   const onSubmit = (data) => {
-    const payload = { ...data };
+    // [PERUBAHAN] Kita paksa is_active menjadi true secara manual
+    const payload = { ...data, is_active: true }; 
+    
     if (!payload.start_date) payload.start_date = null;
     if (!payload.end_date) payload.end_date = null;
     
-    // [MODIFIED] Handle max_attempts: kosong string/0 menjadi null
     if (!payload.max_attempts || payload.max_attempts == 0) {
         payload.max_attempts = null;
     }
@@ -149,7 +147,6 @@ export default function QuestionPackages() {
       )
     },
     { header: 'Durasi', accessor: 'duration_minutes', render: (row) => `${row.duration_minutes} Menit` },
-    // [NEW] Kolom Batas Pengerjaan (Opsional, agar admin bisa lihat di tabel)
     { 
       header: 'Limit', 
       render: (row) => (
@@ -158,14 +155,45 @@ export default function QuestionPackages() {
         </span>
       )
     },
+    // --- BAGIAN LOGIKA WAKTU (Otomatis) ---
     { 
       header: 'Status', 
-      render: (row) => (
-        <span className={`px-2 py-1 text-xs rounded-full ${row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-          {row.is_active ? 'Aktif' : 'Nonaktif'}
-        </span>
-      )
+      render: (row) => {
+        const now = new Date();
+        const startDate = row.start_date ? new Date(row.start_date) : null;
+        
+        // Set batas akhir ke jam 23:59:59 agar berlaku sampai tengah malam
+        const endDate = row.end_date ? new Date(row.end_date) : null;
+        if(endDate) endDate.setHours(23, 59, 59, 999);
+
+        // Cek 1: Apakah belum mulai?
+        if (startDate && now < startDate) {
+            return (
+                <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                    Belum Mulai
+                </span>
+            );
+        }
+
+        // Cek 2: Apakah sudah lewat?
+        if (endDate && now > endDate) {
+            return (
+                <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+                    Selesai
+                </span>
+            );
+        }
+
+        // Cek 3: Default (Tersedia)
+        // Karena tombol manual sudah dihapus, kita anggap sisanya adalah 'Tersedia'
+        return (
+            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                Tersedia
+            </span>
+        );
+      }
     },
+    // -------------------------------------
     {
       header: 'Aksi',
       render: (row) => (
@@ -238,7 +266,7 @@ export default function QuestionPackages() {
                 className="bg-white"
             />
             <p className="text-xs text-yellow-800 mt-1">
-                * Kosongkan atau isi 0 jika siswa diperbolehkan mengerjakan berulang kali tanpa batas.
+                * Kosongkan jika siswa diperbolehkan mengerjakan berulang kali tanpa batas.
             </p>
           </div>
 
@@ -258,11 +286,6 @@ export default function QuestionPackages() {
                 rows="2" 
                 {...register('description')}
             ></textarea>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="isActive" {...register('is_active')} className="rounded text-blue-600" />
-            <label htmlFor="isActive" className="text-sm text-gray-700">Paket Aktif</label>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t">

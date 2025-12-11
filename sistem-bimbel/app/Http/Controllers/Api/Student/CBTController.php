@@ -32,6 +32,20 @@ class CBTController extends Controller
         $packages = QuestionPackage::with(['program', 'questions'])
             ->where('is_active', true)
             ->whereIn('program_id', $studentProgramIds)
+            
+            // Filter 1: Start Date (Sudah mulai atau Null)
+            ->where(function($q) {
+                $q->whereNull('start_date')
+                  ->orWhere('start_date', '<=', now());
+            })
+            
+            // Filter 2: End Date (Belum berakhir atau Null)
+            // Menggunakan whereDate >= now() agar paket yang berakhir HARI INI masih muncul sampai jam 23:59
+            ->where(function($q) {
+                $q->whereNull('end_date')
+                  ->orWhereDate('end_date', '>=', now());
+            })
+
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($pkg) use ($student) {
@@ -61,10 +75,34 @@ class CBTController extends Controller
         $student = $this->getStudentOrAbort($request);
         $package = QuestionPackage::findOrFail($packageId);
 
+        // 1. Cek Aktif Manual
         if (!$package->is_active) {
             return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
         }
 
+        // Validasi Waktu Server (Anti Manipulasi Jam Laptop)
+        $now = now(); 
+
+        // Cek Tanggal Mulai
+        if ($package->start_date && $now < $package->start_date) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Ujian belum dimulai. Silakan cek jadwal.'
+            ], 403);
+        }
+
+        // Cek Tanggal Selesai (di set batas sampai jam 23:59:59 hari tersebut)
+        if ($package->end_date) {
+            $deadline = \Carbon\Carbon::parse($package->end_date)->endOfDay();
+            if ($now > $deadline) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Periode ujian telah berakhir.'
+                ], 403);
+            }
+        }
+
+        // 2. Cek Kuota Pengerjaan
         if (!is_null($package->max_attempts)) {
             $attemptCount = StudentTryoutResult::where('student_id', $student->id)
                 ->where('question_package_id', $package->id)
