@@ -43,6 +43,7 @@ export const API_ENDPOINTS = {
 
 
   // Question Maker
+  QM_DASHBOARD: '/question-maker/dashboard',
   QUESTION_PACKAGES: '/question-maker/packages',
   QUESTIONS: (packageId) => `/question-maker/packages/${packageId}/questions`,
   QUESTION_DETAIL: (packageId, questionId) => 

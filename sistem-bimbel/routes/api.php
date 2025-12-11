@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\Student\ClassController;
 use App\Http\Controllers\Api\Student\CBTController;
 use App\Http\Controllers\Api\Student\AnnouncementController as StudentAnnouncement;
 use App\Http\Controllers\Api\Public\LandingController;
+use App\Http\Controllers\Api\QuestionMaker\DashboardController as QuestionMakerDashboard;
 
 // PUBLIC ROUTES
 Route::prefix('public')->group(function () {
@@ -98,6 +99,7 @@ Route::middleware(['auth:sanctum', 'role:pembuat_soal'])
         Route::delete('packages/{packageId}/questions/{id}', [QuestionController::class, 'destroy']);
         Route::get('reports', [QuestionReportController::class, 'index']);
         Route::post('reports/{id}/respond', [QuestionReportController::class, 'respond']);
+        Route::get('dashboard', [QuestionMakerDashboard::class, 'index']);
     });
 
 // STUDENT ROUTES
