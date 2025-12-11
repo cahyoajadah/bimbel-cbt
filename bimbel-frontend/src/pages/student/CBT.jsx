@@ -38,25 +38,88 @@ export default function CBT() {
     saveAnswer,
     startTimer,
     stopTimer,
+    setTimer, // Pastikan ada action ini di store Anda untuk set waktu manual
     incrementWarning,
     setFullscreen,
     setAutoSaving,
     setSubmitting,
     resetSession,
     getProgress,
+    setQuestions, // Pastikan store bisa set questions via dispatch
   } = useCBTStore();
 
   // --- DATA FETCHING ---
-  const { data: questionsData, isLoading } = useQuery({
+  const { data: cbtData, isLoading, error } = useQuery({
     queryKey: ['cbt-questions', sessionId],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.CBT_QUESTIONS);
-      return res.data.data;
+      return res.data;
     },
     enabled: !!sessionId,
+    retry: 1,
   });
 
+  // --- INITIALIZE SESSION (Timer & Questions) ---
+  useEffect(() => {
+    if (cbtData?.data) {
+      // 1. Set Soal ke Store
+      // Jika struktur response backend: { data: [questions...], meta: { session: {...} } }
+      // Sesuaikan path ini dengan controller Anda. 
+      // Idealnya getQuestions mengembalikan: { success: true, data: questions, session: { start_time, duration, server_time } }
+      
+      const questionsData = Array.isArray(cbtData.data) ? cbtData.data : cbtData.data.questions || [];
+      setQuestions(questionsData); // Update store with fetched questions
+
+      // 2. Sinkronisasi Timer dengan Server (PENTING)
+      // Menggunakan data session dari backend jika tersedia, atau fallback ke duration paket
+      const sessionMeta = cbtData.session || cbtData.meta?.session; 
+      
+      if (sessionMeta) {
+        // const { start_time, duration_minutes, server_time } = sessionMeta;
+        const { duration_minutes, server_time, start_time } = sessionMeta;        
+        // Konversi ke timestamp
+        const startTimeMs = new Date(start_time).getTime();
+        const serverTimeMs = new Date(server_time).getTime();
+        const durationMs = duration_minutes * 60 * 1000;
+        
+        // Hitung waktu selesai seharusnya
+        const endTimeMs = startTimeMs + durationMs;
+        
+        // Hitung sisa detik
+        const remainingSeconds = Math.max(0, Math.floor((endTimeMs - serverTimeMs) / 1000));
+        
+        setTimer(remainingSeconds);
+      } else {
+        // Fallback jika backend belum support meta session (mengambil dari duration soal pertama/paket)
+        // Sebaiknya dihindari agar refresh page aman
+        // if (questionsData.length > 0 && questionsData[0].duration_minutes && timeRemaining === 0) {
+        //      setTimer(questionsData[0].duration_minutes * 60);
+        // }
+
+        if (questionsData.length > 0 && questionsData[0].duration_seconds) {
+           setTimer(questionsData[0].duration_seconds); // Prioritaskan duration_seconds jika ada
+        } else if (questionsData.length > 0 && questionsData[0].duration_minutes) {
+           setTimer(questionsData[0].duration_minutes * 60);
+        }
+      }
+    }
+  }, [cbtData, setQuestions, setTimer, timeRemaining]);
+
+
   // --- MUTATIONS ---
+  const handleForceFinish = useCallback(() => {
+    stopTimer();
+    setSubmitting(false);
+    setIsExiting(false);
+    resetSession();
+    if (screenfull.isEnabled && screenfull.isFullscreen) {
+      screenfull.exit();
+    }
+    // Redirect ke dashboard atau halaman review jika resultId tersedia (perlu logic tambahan)
+    toast.error("Waktu ujian telah habis.");
+    navigate('/student/dashboard'); 
+  }, [navigate, resetSession, setSubmitting, stopTimer]);
+
   const saveAnswerMutation = useMutation({
     mutationFn: async (payload) => {
       await api.post(API_ENDPOINTS.CBT_ANSWER, payload);
@@ -64,9 +127,16 @@ export default function CBT() {
     onSuccess: () => {
         setTimeout(() => setAutoSaving(false), 500); 
     },
-    onError: () => {
+    onError: (err) => {
       setAutoSaving(false);
-      toast.error('Gagal menyimpan jawaban (Cek koneksi)');
+      // HANDLER ERROR 408 (TIMEOUT DARI MIDDLEWARE)
+      if (err.response?.status === 408 || err.response?.data?.code === 'SESSION_TIMEOUT') {
+         handleForceFinish();
+      } else if (err.response?.status === 409) {
+         toast.error("Konflik sesi. Harap refresh.");
+      } else {
+         toast.error('Gagal menyimpan jawaban (Cek koneksi)');
+      }
     },
   });
 
@@ -91,26 +161,28 @@ export default function CBT() {
       toast.success('Ujian selesai!');
       navigate(`/student/tryout-review/${resultId}`);
     },
-    onError: () => {
+    onError: (err) => {
       setSubmitting(false);
       setIsExiting(false);
+      
+      // Jika error timeout saat submit, tetap anggap selesai
+      if (err.response?.status === 408) {
+         toast.success("Waktu habis, jawaban dikumpulkan otomatis.");
+         navigate('/student/dashboard');
+         return;
+      }
       toast.error("Gagal submit. Coba lagi.");
     },
   });
 
   // --- ANSWER HANDLING ---
   const handleAnswerChange = useCallback((qType, value) => {
+    if (!questions || !questions[currentQuestionIndex]) return;
     const currentQ = questions[currentQuestionIndex];
-    if (!currentQ) return;
-
     const questionId = currentQ.id;
     
-    if (qType !== 'short') { 
-        saveAnswer(questionId, value);
-    } else {
-        saveAnswer(questionId, value);
-    }
-    
+    // Optimistic Update ke Store
+    saveAnswer(questionId, value);
     setAutoSaving(true);
 
     const payload = { question_id: questionId };
@@ -121,6 +193,7 @@ export default function CBT() {
     } else {
         payload.answer_option_id = value;
     }
+    
     saveAnswerMutation.mutate(payload);
   }, [questions, currentQuestionIndex, saveAnswer, saveAnswerMutation]);
 
@@ -130,6 +203,7 @@ export default function CBT() {
     if (!currentQ || currentQ.type !== 'short') return;
 
     const storedAnswer = answers[currentQ.id] || '';
+    // Hanya trigger jika textAnswer berbeda dengan yang di store dan textAnswer tidak kosong
     if (textAnswer === storedAnswer) return;
 
     const timer = setTimeout(() => {
@@ -139,17 +213,20 @@ export default function CBT() {
     return () => clearTimeout(timer);
   }, [textAnswer, currentQuestionIndex, questions, answers, handleAnswerChange]);
 
+  // Sync Text Input when Question Changes
   useEffect(() => {
     if (questions && questions.length > 0) {
         const currentQ = questions[currentQuestionIndex];
         if (currentQ && currentQ.type === 'short') {
-            setTextAnswer(answers[currentQ.id] || '');
+            const savedAns = answers[currentQ.id];
+            setTextAnswer(savedAns !== undefined && savedAns !== null ? savedAns : '');
         }
     }
   }, [currentQuestionIndex, answers, questions]);
 
-  // --- SUBMIT & TIMER ---
+  // --- TIMER & SUBMIT ---
   const handlePreSubmitCheck = () => setShowConfirmSubmit(true);
+  
   const confirmSubmitExam = () => {
     setShowConfirmSubmit(false);
     setIsExiting(true);
@@ -157,29 +234,36 @@ export default function CBT() {
     submitMutation.mutate();
   };
 
+  // Jalankan timer hanya ketika ada waktu tersisa dan questions sudah load
   useEffect(() => {
-    if (timeRemaining > 0 && questions.length > 0) {
+    let interval;
+    if (timeRemaining > 0 && questions.length > 0 && !isLoading) {
       startTimer(() => {
+        // Callback saat waktu habis (0)
         setIsExiting(true);
         setSubmitting(true);
         submitMutation.mutate();
       });
     }
     return () => stopTimer();
-  }, [questions.length]);
+  }, [questions.length, isLoading]); // Hapus dependency startTimer agar tidak loop
 
-  // --- SECURITY ---
+  // --- SECURITY (Fullscreen) ---
   useEffect(() => {
     const enterFullscreen = async () => {
       if (screenfull.isEnabled) {
         try {
-          await screenfull.request();
-          setFullscreen(true);
+          if (!screenfull.isFullscreen) {
+             await screenfull.request();
+             setFullscreen(true);
+          }
         } catch (err) {
-          console.error(err);
+          console.error("Fullscreen blocked:", err);
         }
       }
     };
+    
+    // Coba masuk fullscreen saat load
     enterFullscreen();
 
     const handleFullscreenChange = () => {
@@ -187,23 +271,26 @@ export default function CBT() {
         const isNowFullscreen = screenfull.isFullscreen;
         setFullscreen(isNowFullscreen);
 
+        // Jika keluar fullscreen SECARA PAKSA (bukan saat submit/exit valid)
         if (!isNowFullscreen && !isExiting) {
           violationCountRef.current += 1;
           const currentViolations = violationCountRef.current;
+          
+          // Kirim warning ke backend
           fullscreenWarningMutation.mutate();
           incrementWarning();
 
           if (currentViolations === 1) {
             setSecurityViolationType('warning');
             setShowSecurityModal(true);
-          } else if (currentViolations >= 2) {
+          } else if (currentViolations >= 3) { // Biasanya 3 kali toleransi
              setSecurityViolationType('lockout');
              setShowSecurityModal(true);
              setTimeout(() => {
                 setIsExiting(true);
                 setSubmitting(true);
                 submitMutation.mutate();
-             }, 3000);
+             }, 2000);
           }
         }
       }
@@ -215,23 +302,36 @@ export default function CBT() {
     return () => {
       if (screenfull.isEnabled) screenfull.off('change', handleFullscreenChange);
     };
-  }, [isExiting]);
+  }, [isExiting]); // Dependency isExiting penting agar tidak trigger warning saat user klik tombol Selesai
 
   const handleResumeExam = () => {
     if (screenfull.isEnabled) {
       screenfull.request().then(() => setShowSecurityModal(false))
-      .catch(() => toast.error("Gagal masuk layar penuh. Klik lagi."));
+      .catch(() => toast.error("Gagal masuk layar penuh. Silakan refresh halaman atau klik lagi."));
     }
   };
 
+  // Disable Context Menu
   useEffect(() => {
     const preventDefault = (e) => e.preventDefault();
     document.addEventListener('contextmenu', preventDefault);
-    return () => document.removeEventListener('contextmenu', preventDefault);
+    // Optional: Disable Copy/Paste shortcuts
+    const handleKeyDown = (e) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'v' || e.key === 's')) {
+            e.preventDefault();
+        }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+        document.removeEventListener('contextmenu', preventDefault);
+        document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // --- RENDER HELPERS ---
   const formatTime = (seconds) => {
+    if (seconds <= 0) return "00:00:00";
     const hours = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
@@ -257,9 +357,8 @@ export default function CBT() {
                         placeholder="Ketik jawaban Anda di sini..."
                         value={textAnswer}
                         onChange={(e) => setTextAnswer(e.target.value)}
-                        onBlur={(e) => handleAnswerChange('short', e.target.value)}
+                        // onBlur handled by useEffect debounce for cleaner logic
                     />
-                    {/* ICON SAVE DIHAPUS DI SINI */}
                 </div>
                 <div className="mt-2 flex justify-end">
                     {isAutoSaving ? (
@@ -267,8 +366,8 @@ export default function CBT() {
                             <RefreshCw size={12} className="animate-spin" /> Menyimpan otomatis...
                         </span>
                     ) : (
-                        <span className="text-xs text-gray-400">
-                            *Jawaban tersimpan otomatis
+                        <span className="text-xs text-gray-400 flex items-center gap-1">
+                            <CheckCircle2 size={12} className="text-green-500"/> Jawaban tersimpan
                         </span>
                     )}
                 </div>
@@ -319,7 +418,13 @@ export default function CBT() {
                         <div className="flex-1 pt-1">
                             <div className="flex gap-2">
                                 {opt.label && <span className={clsx("font-bold min-w-[1.5rem]", isSelected ? "text-white" : "text-gray-700")}>{opt.label}.</span>}
-                                <div className={clsx("leading-relaxed font-medium", isSelected ? "text-white" : "text-gray-800")}>{opt.text}</div>
+                                <div 
+                                    className={clsx(
+                                        "leading-relaxed font-medium [&>p]:m-0 [&>*]:inline", 
+                                        isSelected ? "text-white" : "text-gray-800"
+                                    )}
+                                    dangerouslySetInnerHTML={{ __html: opt.text || '' }}
+                                />
                             </div>
                             {opt.image && <img src={opt.image} alt="Opsi" className="mt-3 max-h-40 rounded-lg border border-gray-200 shadow-sm bg-white" />}
                         </div>
@@ -330,11 +435,12 @@ export default function CBT() {
     );
   };
 
-  if (isLoading) return <div className="flex justify-center items-center h-screen bg-gray-50">Memuat Soal...</div>;
-  if (!questions || questions.length === 0) return <div className="p-10 text-center bg-gray-50 h-screen">Soal tidak ditemukan.</div>;
+  if (isLoading) return <div className="flex justify-center items-center h-screen bg-gray-50 text-gray-500 font-medium animate-pulse">Memuat Soal...</div>;
+  if (error) return <div className="flex justify-center items-center h-screen bg-gray-50 text-red-500">Terjadi kesalahan: {error.message}</div>;
+  if (!questions || questions.length === 0) return <div className="p-10 text-center bg-gray-50 h-screen flex flex-col justify-center items-center text-gray-500"><span>Tidak ada soal dalam paket ini.</span><Button variant="secondary" onClick={() => navigate(-1)} className="mt-4">Kembali</Button></div>;
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const progress = getProgress();
+  const currentQuestion = questions[currentQuestionIndex] || {};
+  const progress = getProgress ? getProgress() : { answered: 0, percentage: 0 };
   const unansweredCount = questions.length - progress.answered;
 
   return (
@@ -344,7 +450,10 @@ export default function CBT() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 flex items-center gap-2 shadow-sm">
+            <div className={clsx(
+                "px-4 py-2 rounded-xl border flex items-center gap-2 shadow-sm transition-colors",
+                timeRemaining < 300 ? "bg-red-50 border-red-200" : "bg-blue-50 border-blue-100"
+            )}>
                 <Clock className={timeRemaining < 300 ? 'text-red-600 animate-pulse' : 'text-blue-600'} size={20} />
                 <span className={clsx("text-xl font-mono font-bold", timeRemaining < 300 ? 'text-red-600' : 'text-gray-800')}>
                     {formatTime(timeRemaining)}
@@ -355,12 +464,11 @@ export default function CBT() {
           <div className="flex items-center gap-4">
             {warningCount > 0 && (
               <div className="hidden sm:flex bg-red-50 text-red-700 px-3 py-1.5 rounded-full text-xs font-bold items-center gap-2 border border-red-200 animate-pulse">
-                 <AlertTriangle size={14} /> {warningCount}/2
+                 <AlertTriangle size={14} /> Peringatan: {warningCount}/3
               </div>
             )}
             <div className="flex items-center gap-2">
-                {/* Indikator Global Loading */}
-                {isAutoSaving && <RefreshCw size={18} className="animate-spin text-blue-600" />}
+                {isAutoSaving && <RefreshCw size={18} className="animate-spin text-blue-600 mr-2" />}
                 
                 <Button variant="success" onClick={handlePreSubmitCheck} loading={submitMutation.isPending} className="shadow-sm rounded-xl px-6">
                 Selesai
@@ -393,11 +501,12 @@ export default function CBT() {
             </div>
             
             {/* Question Body */}
-            <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
+            <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar flex-1">
                <div className="prose max-w-none mb-8">
-                  <p className="text-lg md:text-xl text-gray-800 leading-relaxed whitespace-pre-wrap font-medium">
-                    {currentQuestion.question_text}
-                  </p>
+                  <div className="text-lg md:text-xl text-gray-800 leading-relaxed font-medium"
+                    dangerouslySetInnerHTML={{ __html: currentQuestion.question_text || '' }}
+                  />
+                  
                   {currentQuestion.question_image && (
                     <img 
                         src={currentQuestion.question_image} 
@@ -455,7 +564,7 @@ export default function CBT() {
                         className={clsx(
                             "h-10 rounded-lg text-sm font-bold transition-all flex items-center justify-center shadow-sm border",
                             isCurr 
-                                ? "bg-blue-600 text-white border-blue-600"
+                                ? "bg-blue-600 text-white border-blue-600 ring-2 ring-blue-200"
                                 : isAns 
                                     ? "bg-green-500 text-white border-green-500 hover:bg-green-600"
                                     : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
@@ -496,7 +605,7 @@ export default function CBT() {
                 <h2 className="text-xl font-extrabold text-gray-900 mb-2">Peringatan Keamanan</h2>
                 <p className="text-gray-600 mb-6 text-sm">
                   Anda keluar dari mode layar penuh. <br/>
-                  <span className="font-bold text-red-600">Ini adalah peringatan terakhir.</span>
+                  <span className="font-bold text-red-600">Sisa toleransi: {3 - (warningCount || 0)} kali lagi.</span>
                 </p>
                 <button onClick={handleResumeExam} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-all">
                   Kembali Mengerjakan
@@ -508,7 +617,8 @@ export default function CBT() {
                   <AlertOctagon className="w-8 h-8 text-red-600" />
                 </div>
                 <h2 className="text-xl font-extrabold text-gray-900 mb-2">Diskualifikasi</h2>
-                <p className="text-gray-600 mb-4 text-sm">Sistem menghentikan ujian karena pelanggaran berulang.</p>
+                <p className="text-gray-600 mb-4 text-sm">Sistem menghentikan ujian karena pelanggaran berulang (Keluar Fullscreen &gt; 3x).</p>
+                <p className="text-xs text-gray-400">Jawaban Anda akan dikumpulkan otomatis.</p>
               </>
             )}
           </div>

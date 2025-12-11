@@ -13,14 +13,29 @@ use Illuminate\Support\Str;
 
 class CBTController extends Controller
 {
+    // =========================================================================
+    // [FIX] Tambahkan Helper Function ini di dalam Class
+    // =========================================================================
+    private function getStudentOrAbort(Request $request)
+    {
+        $student = $request->user()->student;
+        if (!$student) {
+            // Menghentikan eksekusi jika user bukan siswa
+            abort(response()->json(['message' => 'Akun ini bukan akun siswa yang valid'], 403));
+        }
+        return $student;
+    }
+
     public function availableTryouts(Request $request)
     {
-        $user = $request->user();
-        $student = $user->student;
+        // $user = $request->user();
+        // $student = $user->student;
 
-        if (!$student) {
-            return response()->json(['message' => 'Data siswa tidak ditemukan'], 404);
-        }
+        // if (!$student) {
+        //     return response()->json(['message' => 'Data siswa tidak ditemukan'], 404);
+        // }
+        $student = $this->getStudentOrAbort($request);
+
 
         $studentProgramIds = $student->programs()->pluck('programs.id');
 
@@ -54,81 +69,214 @@ class CBTController extends Controller
         return response()->json(['success' => true, 'data' => $packages]);
     }
 
-    public function startSession(Request $request, $packageId)
-    {
-        $student = $request->user()->student;
-        $package = QuestionPackage::findOrFail($packageId);
+    // public function startSession(Request $request, $packageId)
+    // {
+    //     $student = $request->user()->student;
+    //     $package = QuestionPackage::findOrFail($packageId);
 
-        if (!$package->is_active) {
-            return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
-        }
+    //     if (!$package->is_active) {
+    //         return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
+    //     }
 
-        if (!is_null($package->max_attempts)) {
-            $attemptCount = StudentTryoutResult::where('student_id', $student->id)
-                ->where('question_package_id', $package->id)
-                ->count();
+    //     if (!is_null($package->max_attempts)) {
+    //         $attemptCount = StudentTryoutResult::where('student_id', $student->id)
+    //             ->where('question_package_id', $package->id)
+    //             ->count();
 
-            if ($attemptCount >= $package->max_attempts) {
+    //         if ($attemptCount >= $package->max_attempts) {
+    //             return response()->json([
+    //                 'success' => false, 
+    //                 'message' => "Kuota pengerjaan habis. Batas maksimal: {$package->max_attempts} kali."
+    //             ], 403);
+    //         }
+    //     }
+
+    //     $ongoingSession = CbtSession::where('student_id', $student->id)
+    //         ->where('status', 'ongoing')
+    //         ->first();
+
+    //     if ($ongoingSession) {
+    //         return response()->json(['success' => false, 'message' => 'Masih ada sesi aktif'], 409);
+    //     }
+
+    //     DB::beginTransaction();
+    //     try {
+    //         $session = CbtSession::create([
+    //             'student_id' => $student->id,
+    //             'question_package_id' => $package->id,
+    //             'session_token' => Str::random(64),
+    //             'start_time' => now(),
+    //             'status' => 'ongoing',
+    //             'is_fullscreen' => true,
+    //         ]);
+
+    //         $questions = $package->questions;
+    //         foreach ($questions as $question) {
+    //             StudentAnswer::create([
+    //                 'cbt_session_id' => $session->id,
+    //                 'question_id' => $question->id,
+    //             ]);
+    //         }
+
+    //         DB::commit();
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'Sesi CBT dimulai',
+    //             'data' => [
+    //                 'session_token' => $session->session_token,
+    //                 'session_id' => $session->id,
+    //                 'package' => $package,
+    //                 'duration_minutes' => $package->duration_minutes,
+    //                 'total_questions' => $package->total_questions,
+    //                 'start_time' => $session->start_time,
+    //             ]
+    //         ]);
+
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+    //     }
+    // }
+
+    // BARU START SESSION
+
+    // ... namespace dan use statements tetap sama
+
+public function startSession(Request $request, $packageId)
+{
+    $student = $this->getStudentOrAbort($request);
+    $package = QuestionPackage::findOrFail($packageId);
+
+    if (!$package->is_active) {
+        return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
+    }
+
+    // 1. Cek Sesi Ongoing (Paket apapun)
+    $ongoingSession = CbtSession::where('student_id', $student->id)
+        ->where('status', 'ongoing')
+        ->first();
+
+    if ($ongoingSession) {
+        // Hitung waktu berakhir seharusnya
+        $startTime = $ongoingSession->start_time;
+        // Asumsi duration_minutes ada di relasi questionPackage, load jika perlu
+        $ongoingPackage = $ongoingSession->questionPackage; 
+        $maxEndTime = $startTime->copy()->addMinutes($ongoingPackage->duration_minutes);
+        
+        // 2. LOGIKA TIMER SERVER-SIDE
+        if (now()->greaterThan($maxEndTime)) {
+            // A. Waktu Habis: Auto Submit sesi lama
+            // Kita panggil service submit (perlu inject CBTService atau panggil logic yang sama)
+            // Untuk simpelnya di sini saya panggil logic submit internal
+            $this->forceSubmitSession($ongoingSession); 
+            
+            // Setelah di-submit, variable $ongoingSession jadi null (logic flow)
+            $ongoingSession = null; 
+        } else {
+            // B. Waktu Masih Ada
+            
+            // Jika mencoba mengerjakan paket yang SAMA -> RESUME (Lanjutkan)
+            if ($ongoingSession->question_package_id == $package->id) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Melanjutkan sesi tryout',
+                    'data' => [
+                        'session_token' => $ongoingSession->session_token,
+                        'session_id' => $ongoingSession->id,
+                        'package' => $package,
+                        'duration_minutes' => $package->duration_minutes,
+                        'total_questions' => $package->questions->count(), // Sesuaikan relation count
+                        'start_time' => $ongoingSession->start_time,
+                        'server_time' => now(), // Penting untuk sinkronisasi timer frontend
+                        'is_resumed' => true
+                    ]
+                ]);
+            } else {
+                // Jika mencoba mengerjakan paket BEDA tapi paket A masih jalan -> Error Conflict
                 return response()->json([
                     'success' => false, 
-                    'message' => "Kuota pengerjaan habis. Batas maksimal: {$package->max_attempts} kali."
-                ], 403);
+                    'message' => 'Anda masih memiliki sesi ujian lain yang sedang berjalan.'
+                ], 409);
             }
-        }
-
-        $ongoingSession = CbtSession::where('student_id', $student->id)
-            ->where('status', 'ongoing')
-            ->first();
-
-        if ($ongoingSession) {
-            return response()->json(['success' => false, 'message' => 'Masih ada sesi aktif'], 409);
-        }
-
-        DB::beginTransaction();
-        try {
-            $session = CbtSession::create([
-                'student_id' => $student->id,
-                'question_package_id' => $package->id,
-                'session_token' => Str::random(64),
-                'start_time' => now(),
-                'status' => 'ongoing',
-                'is_fullscreen' => true,
-            ]);
-
-            $questions = $package->questions;
-            foreach ($questions as $question) {
-                StudentAnswer::create([
-                    'cbt_session_id' => $session->id,
-                    'question_id' => $question->id,
-                ]);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Sesi CBT dimulai',
-                'data' => [
-                    'session_token' => $session->session_token,
-                    'session_id' => $session->id,
-                    'package' => $package,
-                    'duration_minutes' => $package->duration_minutes,
-                    'total_questions' => $package->total_questions,
-                    'start_time' => $session->start_time,
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
+
+    // Cek kuota attempt jika sesi baru mau dibuat
+    if (!is_null($package->max_attempts)) {
+        $attemptCount = StudentTryoutResult::where('student_id', $student->id)
+            ->where('question_package_id', $package->id)
+            ->count();
+
+        if ($attemptCount >= $package->max_attempts) {
+            return response()->json([
+                'success' => false, 
+                'message' => "Kuota pengerjaan habis. Batas maksimal: {$package->max_attempts} kali."
+            ], 403);
+        }
+    }
+
+    // 3. Pembuatan Sesi Baru (Code lama Anda, dibungkus transaction)
+    DB::beginTransaction();
+    try {
+        $session = CbtSession::create([
+            'student_id' => $student->id,
+            'question_package_id' => $package->id,
+            'session_token' => Str::random(64),
+            'start_time' => now(),
+            'status' => 'ongoing',
+            'is_fullscreen' => true,
+        ]);
+
+        $questions = $package->questions;
+        foreach ($questions as $question) {
+            StudentAnswer::create([
+                'cbt_session_id' => $session->id,
+                'question_id' => $question->id,
+            ]);
+        }
+
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Sesi CBT dimulai',
+            'data' => [
+                'session_token' => $session->session_token,
+                'session_id' => $session->id,
+                'package' => $package,
+                'duration_minutes' => $package->duration_minutes,
+                'total_questions' => $questions->count(),
+                'start_time' => $session->start_time,
+                'server_time' => now(), // Tambahkan ini
+            ]
+        ]);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+    }
+}
+
+// Tambahkan helper private untuk force submit (bisa dipindah ke Service)
+private function forceSubmitSession($session)
+{
+    // Logika sama seperti submitTryout, tapi dilakukan di backend tanpa request user
+    // Sebaiknya gunakan CBTService di sini agar DRY (Don't Repeat Yourself)
+    $cbtService = new \App\Services\CBTService();
+    $cbtService->submitTryout($session);
+}
+
 
     public function getQuestions(Request $request)
     {
         $session = $request->cbt_session;
-        
-        $questions = $session->questionPackage->questions()
+        // Ambil paket soal untuk info durasi
+        $package = $session->questionPackage;
+
+
+        // $questions = $session->questionPackage->questions()
+        $questions = $package->questions()
             ->with(['answerOptions'])
             ->orderBy('order_number')
             ->get()
@@ -152,9 +300,32 @@ class CBTController extends Controller
                 ];
             });
 
-        return response()->json(['success' => true, 'data' => $questions]);
+        return response()->json([
+            'success' => true, 
+            'data' => $questions,
+            
+            // [PENTING] Tambahkan info sesi ini agar timer frontend bisa resume/lanjut
+            'session' => [
+                'id' => $session->id,
+                'start_time' => $session->start_time, // Waktu mulai asli di DB
+                'duration_minutes' => $package->duration_minutes,
+                'server_time' => now(), // Waktu server saat ini untuk sinkronisasi
+                'remaining_seconds' => $this->calculateRemainingSeconds($session, $package)
+            ]
+        ]);
     }
 
+    // Helper untuk hitung sisa detik di backend (Opsional, tapi bagus untuk validasi)
+    private function calculateRemainingSeconds($session, $package)
+    {
+        $startTime = $session->start_time;
+        $endTime = $startTime->copy()->addMinutes($package->duration_minutes);
+        $remaining = now()->diffInSeconds($endTime, false); // false agar bisa return minus jika lewat
+        
+        return max(0, $remaining);
+    }
+
+    
     public function saveAnswer(Request $request)
     {
         $session = $request->cbt_session;

@@ -10,10 +10,11 @@ export const useCBTStore = create((set, get) => ({
   packageData: null,
   questions: [],
   currentQuestionIndex: 0,
-  answers: {}, // Stores: { qId: optionId } OR { qId: [id1, id2] } OR { qId: "text" }
+  answers: {}, 
   
-  // Timer
+  // Timer State
   timeRemaining: 0,
+  endTime: null, // [BARU] Menyimpan waktu selesai absolut (Timestamp)
   timerInterval: null,
   
   // Fullscreen & Security
@@ -31,20 +32,34 @@ export const useCBTStore = create((set, get) => ({
       sessionId: sessionData.session_id,
       packageData: sessionData.package,
       questions: questions,
+      // Init awal, setTimer akan dipanggil ulang oleh komponen untuk sinkronisasi presisi
       timeRemaining: sessionData.duration_minutes * 60,
-      answers: {}, // Load previous answers here if backend supports resume
+      answers: {}, 
       currentQuestionIndex: 0,
       warningCount: 0,
     });
     
     sessionStorage.setItem('cbt_session_token', sessionData.session_token);
   },
+
+  setQuestions: (questions) => {
+    set({ questions });
+  },
+
+  // [PERBAIKAN] Set timer berdasarkan target waktu selesai
+  setTimer: (seconds) => {
+    const now = Date.now();
+    const endTime = now + (seconds * 1000);
+    set({ 
+        timeRemaining: seconds,
+        endTime: endTime // Simpan deadline di state
+    });
+  },
   
   setCurrentQuestion: (index) => {
     set({ currentQuestionIndex: index });
   },
   
-  // Updated to handle various data types (string, array, int)
   saveAnswer: (questionId, answerValue) => {
     set((state) => ({
       answers: {
@@ -54,18 +69,32 @@ export const useCBTStore = create((set, get) => ({
     }));
   },
   
+  // [PERBAIKAN] Logic timer menghitung selisih waktu (Anti-Freeze & Background Support)
   startTimer: (callback) => {
-    if (get().timerInterval) return; // Prevent duplicate timers
+    if (get().timerInterval) return; 
+
+    // Pastikan endTime ada, jika tidak, buat baru berdasarkan timeRemaining saat ini
+    let { endTime, timeRemaining } = get();
+    if (!endTime && timeRemaining > 0) {
+        endTime = Date.now() + (timeRemaining * 1000);
+        set({ endTime });
+    }
 
     const interval = setInterval(() => {
-      const newTime = get().timeRemaining - 1;
+      const { endTime } = get();
+      if (!endTime) return;
+
+      const now = Date.now();
+      // Hitung selisih waktu nyata
+      const diff = Math.ceil((endTime - now) / 1000);
       
-      if (newTime <= 0) {
+      if (diff <= 0) {
         clearInterval(get().timerInterval);
-        set({ timeRemaining: 0 });
+        set({ timeRemaining: 0, timerInterval: null });
         if (callback) callback();
       } else {
-        set({ timeRemaining: newTime });
+        // Update UI dengan selisih waktu yang akurat
+        set({ timeRemaining: diff });
       }
     }, 1000);
     
@@ -97,9 +126,7 @@ export const useCBTStore = create((set, get) => ({
   
   resetSession: () => {
     const { timerInterval } = get();
-    if (timerInterval) {
-      clearInterval(timerInterval);
-    }
+    if (timerInterval) clearInterval(timerInterval);
     
     sessionStorage.removeItem('cbt_session_token');
     
@@ -111,6 +138,7 @@ export const useCBTStore = create((set, get) => ({
       currentQuestionIndex: 0,
       answers: {},
       timeRemaining: 0,
+      endTime: null, // Reset endTime
       timerInterval: null,
       isFullscreen: true,
       warningCount: 0,
@@ -119,16 +147,14 @@ export const useCBTStore = create((set, get) => ({
     });
   },
   
-  // Enhanced Progress Calculation
   getProgress: () => {
     const { questions, answers } = get();
-    const totalQuestions = questions.length;
+    const totalQuestions = questions?.length || 0;
     
-    // Hitung jawaban valid saja
     const answeredCount = Object.values(answers).filter(val => {
-        if (Array.isArray(val)) return val.length > 0; // Array kosong = belum jawab
-        if (typeof val === 'string') return val.trim().length > 0; // Teks kosong = belum jawab
-        return val !== null && val !== undefined; // Null = belum jawab
+        if (Array.isArray(val)) return val.length > 0; 
+        if (typeof val === 'string') return val.trim().length > 0;
+        return val !== null && val !== undefined; 
     }).length;
 
     return {

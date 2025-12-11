@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { getCsrfToken } from './api/axiosConfig.js'
+import 'katex/dist/katex.min.css';
 
 const root = createRoot(document.getElementById('root'));
 
