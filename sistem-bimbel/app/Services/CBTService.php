@@ -143,7 +143,7 @@ class CBTService
     {
         $session->increment('warning_count');
 
-        if ($session->warning_count >= 3) {
+        if ($session->warning_count >= 2) {
             $session->update([
                 'status' => 'auto_submit',
                 'end_time' => now(),

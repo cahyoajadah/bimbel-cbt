@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 import { getCsrfToken } from './api/axiosConfig.js'
+import 'katex/dist/katex.min.css';
 
 // [FIX] Menyembunyikan warning "findDOMNode" yang berasal dari library React Quill
 // Warning ini muncul karena library tersebut belum update ke React 18, tapi aman untuk diabaikan.

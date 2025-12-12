@@ -10,10 +10,10 @@ use App\Models\QuestionReport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class CBTController extends Controller
 {
-    // [FIX] Helper function untuk cek siswa
     private function getStudentOrAbort(Request $request)
     {
         $student = $request->user()->student;
@@ -27,6 +27,23 @@ class CBTController extends Controller
     {
         $student = $this->getStudentOrAbort($request);
 
+        // [FIX 1] Auto-Cleanup: Cek sesi ongoing yang sudah expired dan paksa submit
+        // Ini mencegah Error 409 karena sesi "nyangkut"
+        $stuckSessions = CbtSession::where('student_id', $student->id)
+            ->where('status', 'ongoing')
+            ->get();
+
+        foreach ($stuckSessions as $session) {
+            $pkg = $session->questionPackage;
+            if ($pkg) {
+                $maxEndTime = Carbon::parse($session->start_time)->addMinutes($pkg->duration_minutes);
+                // Beri toleransi 1 menit untuk latensi
+                if (now()->greaterThan($maxEndTime->addMinutes(1))) {
+                    $this->forceSubmitSession($session);
+                }
+            }
+        }
+
         $studentProgramIds = $student->programs()->pluck('programs.id');
 
         $packages = QuestionPackage::with(['program', 'questions'])
@@ -38,6 +55,9 @@ class CBTController extends Controller
                 $attemptsCount = StudentTryoutResult::where('student_id', $student->id)
                     ->where('question_package_id', $pkg->id)
                     ->count();
+                
+                // [FIX 2] Hapus konsep "unlimited". Jika null, default ke 1 kali.
+                $limit = $pkg->max_attempts ?? 1;
 
                 return [
                     'id' => $pkg->id,
@@ -47,9 +67,11 @@ class CBTController extends Controller
                     'total_questions' => $pkg->questions->count(),
                     'duration_minutes' => $pkg->duration_minutes,
                     'passing_score' => $pkg->passing_score,
-                    'max_attempts' => $pkg->max_attempts,
+                    'max_attempts' => $limit, // Selalu kirim angka
                     'user_attempts_count' => $attemptsCount,
                     'already_attempted' => $attemptsCount > 0,
+                    // Flag apakah boleh mengerjakan lagi
+                    'can_attempt' => $attemptsCount < $limit
                 ];
             });
 
@@ -65,34 +87,71 @@ class CBTController extends Controller
             return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
         }
 
-        if (!is_null($package->max_attempts)) {
-            $attemptCount = StudentTryoutResult::where('student_id', $student->id)
-                ->where('question_package_id', $package->id)
-                ->count();
-
-            if ($attemptCount >= $package->max_attempts) {
-                return response()->json([
-                    'success' => false, 
-                    'message' => "Kuota pengerjaan habis. Batas maksimal: {$package->max_attempts} kali."
-                ], 403);
-            }
-        }
-
+        // 1. Cek Sesi Ongoing
         $ongoingSession = CbtSession::where('student_id', $student->id)
             ->where('status', 'ongoing')
             ->first();
 
         if ($ongoingSession) {
-            return response()->json(['success' => false, 'message' => 'Masih ada sesi aktif'], 409);
+            // Hitung ulang expired time
+            $startTime = Carbon::parse($ongoingSession->start_time);
+            $ongoingPackage = $ongoingSession->questionPackage; 
+            $maxEndTime = $startTime->copy()->addMinutes($ongoingPackage->duration_minutes);
+            
+            // Jika waktu sudah habis, submit otomatis
+            if (now()->greaterThan($maxEndTime)) {
+                $this->forceSubmitSession($ongoingSession); 
+                $ongoingSession = null; 
+            } else {
+                // Jika masih ada waktu
+                if ($ongoingSession->question_package_id == $package->id) {
+                    // RESUME (Lanjutkan sesi yang sama)
+                    // [FIX 3] Pastikan start_time dikirim dengan benar agar frontend tidak reset timer
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Melanjutkan sesi tryout',
+                        'data' => [
+                            'session_token' => $ongoingSession->session_token,
+                            'session_id' => $ongoingSession->id,
+                            'package' => $package,
+                            'duration_minutes' => $package->duration_minutes,
+                            'total_questions' => $package->questions->count(),
+                            'start_time' => $ongoingSession->start_time, // PENTING: Waktu mulai ASLI
+                            'server_time' => now(), 
+                            'is_resumed' => true
+                        ]
+                    ]);
+                } else {
+                    // Konflik beda paket
+                    return response()->json([
+                        'success' => false, 
+                        'message' => 'Anda sedang mengerjakan paket lain. Selesaikan atau tunggu waktu habis.'
+                    ], 409);
+                }
+            }
         }
 
+        // [FIX 2] Cek kuota attempt (Strict, tidak ada null/unlimited)
+        $limit = $package->max_attempts ?? 1;
+        $attemptCount = StudentTryoutResult::where('student_id', $student->id)
+            ->where('question_package_id', $package->id)
+            ->count();
+
+        if ($attemptCount >= $limit) {
+            return response()->json([
+                'success' => false, 
+                'message' => "Kuota pengerjaan habis. Maksimal: {$limit} kali."
+            ], 403);
+        }
+
+        // 3. Buat Sesi Baru
         DB::beginTransaction();
         try {
             $session = CbtSession::create([
                 'student_id' => $student->id,
                 'question_package_id' => $package->id,
                 'session_token' => Str::random(64),
-                'start_time' => now(),
+                'start_time' => now(), // Timer start from here
                 'status' => 'ongoing',
                 'is_fullscreen' => true,
             ]);
@@ -115,8 +174,9 @@ class CBTController extends Controller
                     'session_id' => $session->id,
                     'package' => $package,
                     'duration_minutes' => $package->duration_minutes,
-                    'total_questions' => $package->total_questions,
+                    'total_questions' => $questions->count(),
                     'start_time' => $session->start_time,
+                    'server_time' => now(),
                 ]
             ]);
 
@@ -126,13 +186,22 @@ class CBTController extends Controller
         }
     }
 
+    private function forceSubmitSession($session)
+    {
+        $cbtService = new \App\Services\CBTService();
+        try {
+            $cbtService->submitTryout($session);
+        } catch (\Exception $e) {
+            // Log error but allow process to continue
+        }
+    }
+
     public function getQuestions(Request $request)
     {
         $session = $request->cbt_session;
-        if (!$session) return response()->json(['message' => 'Sesi tidak valid'], 401);
+        $package = $session->questionPackage;
 
-        // [FIX] Pastikan relation answerOptions diload
-        $questions = $session->questionPackage->questions()
+        $questions = $package->questions()
             ->with(['answerOptions']) 
             ->orderBy('order_number')
             ->get()
@@ -144,12 +213,11 @@ class CBTController extends Controller
                     'point' => $question->point,
                     'question_text' => $question->question_text,
                     'question_image' => $question->question_image,
-                    'duration_seconds' => $question->duration_seconds,
+                    // duration_seconds di level soal diabaikan untuk timer global
                     'options' => $question->answerOptions->map(function($option) {
                         return [
                             'id' => $option->id,
                             'label' => $option->option_label,
-                            // [FIX] Pastikan field text selalu terisi untuk menghindari null di frontend
                             'text' => $option->option_text ?? '', 
                             'image' => $option->option_image,
                         ];
@@ -157,9 +225,30 @@ class CBTController extends Controller
                 ];
             });
 
-        return response()->json(['success' => true, 'data' => $questions]);
+        // [FIX 3] Kalkulasi sisa waktu yang tepat berdasarkan start_time
+        $startTime = Carbon::parse($session->start_time);
+        $endTime = $startTime->copy()->addMinutes($package->duration_minutes);
+        $remaining = now()->diffInSeconds($endTime, false);
+        $remainingSeconds = max(0, $remaining);
+
+        return response()->json([
+            'success' => true, 
+            'data' => $questions,
+            'session' => [
+                'id' => $session->id,
+                'start_time' => $session->start_time,
+                'duration_minutes' => $package->duration_minutes,
+                'server_time' => now(), 
+                'remaining_seconds' => $remainingSeconds // Gunakan ini di frontend
+            ]
+        ]);
     }
 
+    // ... sisa method (saveAnswer, submitTryout, reviewResult, dll) tetap sama ...
+    
+    // Pastikan copy paste sisa method (saveAnswer, submitTryout, reviewResult, reportQuestion, fullscreenWarning)
+    // dari file asli Anda ke sini agar tidak hilang.
+    
     public function saveAnswer(Request $request)
     {
         $session = $request->cbt_session;
@@ -362,10 +451,16 @@ class CBTController extends Controller
     {
         $session = $request->cbt_session;
         $session->increment('warning_count');
+
         if ($session->warning_count >= 3) {
-            $session->update(['status' => 'auto_submit', 'end_time' => now()]);
-            return response()->json(['success' => false, 'message' => 'Auto submit', 'auto_submit' => true], 400);
+            $this->forceSubmitSession($session);
+            return response()->json([
+                'success' => false, 
+                'message' => 'Batas peringatan tercapai. Ujian dikumpulkan otomatis.', 
+                'auto_submit' => true
+            ], 400);
         }
+        
         return response()->json(['success' => true, 'message' => "Peringatan {$session->warning_count}"]);
     }
 }

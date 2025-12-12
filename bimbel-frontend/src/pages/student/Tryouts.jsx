@@ -12,7 +12,7 @@ export default function Tryouts() {
   const navigate = useNavigate();
   const { initSession } = useCBTStore();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['student-tryouts'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.TRYOUTS);
@@ -33,7 +33,11 @@ export default function Tryouts() {
         headers: { 'X-CBT-Session-Token': sessionData.session_token }
       }).then(res => {
         initSession(sessionData, res.data.data);
-        toast.success(`Sesi tryout ${sessionData.package.name} dimulai!`);
+        if(sessionData.is_resumed) {
+            toast('Melanjutkan sesi sebelumnya...', { icon: '🔄' });
+        } else {
+            toast.success(`Sesi tryout ${sessionData.package.name} dimulai!`);
+        }
         navigate(`/student/cbt/${sessionData.session_id}`);
       }).catch(err => {
         toast.error('Gagal memuat soal. Silakan coba lagi.');
@@ -42,8 +46,13 @@ export default function Tryouts() {
       });
     },
     onError: (error) => {
-      // Menangani error dari backend (termasuk jika kuota habis)
-      toast.error(error.response?.data?.message || 'Gagal memulai sesi tryout');
+      if (error.response?.status === 409) {
+         toast.error("Anda memiliki sesi ujian lain yang belum selesai.", { duration: 4000 });
+         // Opsional: Refresh list agar status terupdate jika backend melakukan auto-cleanup
+         refetch();
+      } else {
+         toast.error(error.response?.data?.message || 'Gagal memulai sesi tryout');
+      }
     },
   });
 
@@ -76,21 +85,21 @@ export default function Tryouts() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tryoutPackages.map((pkg) => {
-          // [NEW LOGIC] Cek Limit Pengerjaan
-          // Backend mengirimkan max_attempts dan user_attempts_count
-          const maxAttempts = pkg.max_attempts;
+          // [UPDATED] Mengambil nilai langsung dari backend yang sudah di-fix
+          const maxAttempts = pkg.max_attempts; 
           const userAttempts = pkg.user_attempts_count || 0;
-          const isLimitReached = maxAttempts !== null && userAttempts >= maxAttempts;
+          // Gunakan flag dari backend jika tersedia, atau hitung manual
+          const canAttempt = pkg.can_attempt !== undefined ? pkg.can_attempt : (userAttempts < maxAttempts);
 
           return (
             <div
               key={pkg.id}
               className={`bg-white rounded-lg shadow p-6 border-t-4 space-y-4 ${
-                isLimitReached ? 'border-gray-400 opacity-80' : 'border-blue-600'
+                !canAttempt ? 'border-gray-400 opacity-80' : 'border-blue-600'
               }`}
             >
               <div className="flex items-center space-x-3">
-                <FileText className={`w-6 h-6 ${isLimitReached ? 'text-gray-400' : 'text-blue-600'}`} />
+                <FileText className={`w-6 h-6 ${!canAttempt ? 'text-gray-400' : 'text-blue-600'}`} />
                 <h3 className="text-xl font-bold text-gray-900">{pkg.name}</h3>
               </div>
 
@@ -112,18 +121,14 @@ export default function Tryouts() {
                   </div>
                 )}
 
-                {/* [NEW] Tampilan Sisa Kuota */}
+                {/* [FIX] Menghapus kondisi "Bisa dikerjakan berulang" dan selalu menampilkan kuota */}
                 <div className={`flex items-center text-sm font-medium mt-2 p-2 rounded ${
-                    isLimitReached ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                    !canAttempt ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
                 }`}>
-                    {isLimitReached ? <AlertCircle className="w-4 h-4 mr-2"/> : <CheckCircle className="w-4 h-4 mr-2"/>}
-                    {maxAttempts === null ? (
-                        <span>Bisa dikerjakan berulang</span>
-                    ) : (
-                        <span>
-                            Kesempatan: <strong>{userAttempts}</strong> / {maxAttempts} kali
-                        </span>
-                    )}
+                    {!canAttempt ? <AlertCircle className="w-4 h-4 mr-2"/> : <CheckCircle className="w-4 h-4 mr-2"/>}
+                    <span>
+                        Kesempatan: <strong>{userAttempts}</strong> / {maxAttempts} kali
+                    </span>
                 </div>
               </div>
               
@@ -131,14 +136,13 @@ export default function Tryouts() {
                 onClick={() => handleStartTryout(pkg.id)}
                 loading={startSessionMutation.isPending}
                 className="w-full"
-                // [NEW] Disable tombol jika limit habis
-                disabled={isLimitReached || startSessionMutation.isPending}
-                variant={isLimitReached ? "secondary" : "primary"}
-                icon={isLimitReached ? null : ArrowRight}
+                disabled={!canAttempt || startSessionMutation.isPending}
+                variant={!canAttempt ? "secondary" : "primary"}
+                icon={!canAttempt ? null : ArrowRight}
               >
                 {startSessionMutation.isPending 
                     ? 'Memulai Sesi...' 
-                    : isLimitReached 
+                    : !canAttempt 
                         ? 'Kesempatan Habis' 
                         : 'Mulai Tryout'
                 }

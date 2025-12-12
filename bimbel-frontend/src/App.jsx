@@ -6,6 +6,9 @@ import AppRoutes from './routes/AppRoutes';
 import { ConfirmDialog } from './components/common/ConfirmDialog';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
+import 'katex/dist/katex.min.css';
+
+
 // Create a client
 const queryClient = new QueryClient({
   defaultOptions: {
