@@ -24,7 +24,6 @@ class CBTSessionMiddleware
         }
 
         // 2. Ambil Sesi berdasarkan Token & Status Ongoing
-        // Kita juga meload 'questionPackage' untuk mengecek durasi
         $session = CbtSession::where('session_token', $sessionToken)
             ->where('status', 'ongoing')
             ->with('questionPackage') 
@@ -38,7 +37,6 @@ class CBTSessionMiddleware
         }
 
         // 3. Validasi Kepemilikan (Security)
-        // Pastikan user yang login adalah pemilik sesi ini
         $userStudentId = $request->user()->student->id ?? null;
         if ($session->student_id !== $userStudentId) {
             return response()->json([
@@ -47,23 +45,21 @@ class CBTSessionMiddleware
             ], 403);
         }
 
-        // 4. VALIDASI WAKTU SERVER (Logic Baru)
-        // Menghitung batas waktu selesai berdasarkan start_time + durasi paket
+        // 4. VALIDASI WAKTU SERVER (Logic Baru & Lebih Aman)
         if ($session->questionPackage) {
-            $startTime = $session->start_time;
-            $durationMinutes = $session->questionPackage->duration_minutes;
+            // [FIX] Pastikan start_time diparse sebagai Carbon untuk menghindari error format string
+            $startTime = \Carbon\Carbon::parse($session->start_time);
+            $durationMinutes = (int) $session->questionPackage->duration_minutes;
             
-            // Tambahkan buffer/toleransi waktu (misal 30 detik) untuk latency internet
-            $maxEndTime = $startTime->copy()->addMinutes($durationMinutes)->addSeconds(30);
+            // Tambahkan buffer 1 menit untuk toleransi latency jaringan
+            $maxEndTime = $startTime->copy()->addMinutes($durationMinutes)->addSeconds(60);
 
             if (now()->greaterThan($maxEndTime)) {
-                // Jika waktu server sudah lewat, paksa tutup sesi
                 $session->update([
                     'status' => 'completed', 
                     'end_time' => now()
                 ]);
 
-                // Return status khusus 408 (Request Timeout) agar frontend bisa redirect
                 return response()->json([
                     'success' => false,
                     'message' => 'Waktu ujian telah habis.',
@@ -72,22 +68,20 @@ class CBTSessionMiddleware
             }
         }
 
-        // 5. Cek Konflik Sesi Lain (Optional tapi bagus untuk integritas)
-        // Memastikan tidak ada sesi 'ongoing' lain selain yang sedang diakses saat ini
+        // 5. Cek Konflik Sesi Lain
         $otherOngoingSession = CbtSession::where('student_id', $session->student_id)
             ->where('id', '!=', $session->id)
             ->where('status', 'ongoing')
             ->exists();
 
         if ($otherOngoingSession) {
-            // Opsional: Anda bisa memilih untuk mematikan sesi lain di sini atau membiarkan error
             return response()->json([
                 'success' => false,
                 'message' => 'Terdeteksi sesi aktif lain. Harap selesaikan sesi tersebut dahulu.'
             ], 409);
         }
 
-        // 6. Merge sesi ke request agar bisa dipakai di Controller tanpa query ulang
+        // 6. Merge sesi ke request
         $request->merge(['cbt_session' => $session]);
 
         return $next($request);

@@ -55,7 +55,6 @@ export default function CBT() {
   useEffect(() => {
     // Reset data store segera saat sessionId berubah (ganti paket)
     // Ini mencegah Timer paket lama 'bocor' ke paket baru
-    resetSession();
 
     return () => {
       resetSession();
@@ -63,7 +62,7 @@ export default function CBT() {
         screenfull.exit();
       }
     };
-  }, [sessionId, resetSession]);
+  }, [resetSession]);
 
   // --- DATA FETCHING ---
   const { data: cbtData, isLoading, error } = useQuery({
@@ -377,7 +376,7 @@ export default function CBT() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {warningCount > 0 && <div className="hidden sm:flex bg-red-50 text-red-700 px-3 py-1.5 rounded-full text-xs font-bold items-center gap-2 border border-red-200 animate-pulse"><AlertTriangle size={14} /> Peringatan: {warningCount}/3</div>}
+            {warningCount > 0 && <div className="hidden sm:flex bg-red-50 text-red-700 px-3 py-1.5 rounded-full text-xs font-bold items-center gap-2 border border-red-200 animate-pulse"><AlertTriangle size={14} /> Peringatan: {warningCount}/2</div>}
             <div className="flex items-center gap-2">
                 {isAutoSaving && <RefreshCw size={18} className="animate-spin text-blue-600 mr-2" />}
                 <Button variant="success" onClick={handlePreSubmitCheck} loading={submitMutation.isPending} className="shadow-sm rounded-xl px-6">Selesai</Button>
@@ -444,7 +443,7 @@ export default function CBT() {
               <>
                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4"><AlertOctagon className="w-8 h-8 text-red-600" /></div>
                 <h2 className="text-xl font-extrabold text-gray-900 mb-2">Diskualifikasi</h2>
-                <p className="text-gray-600 mb-4 text-sm">Sistem menghentikan ujian karena pelanggaran berulang (Keluar Fullscreen &gt; 3x).</p>
+                <p className="text-gray-600 mb-4 text-sm">Sistem menghentikan ujian karena pelanggaran berulang.</p>
                 <p className="text-xs text-gray-400">Jawaban Anda akan dikumpulkan otomatis.</p>
               </>
             )}

@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 
 class CBTController extends Controller
 {
-    // [FIX] Helper function untuk cek siswa
+    // Helper function untuk cek siswa
     private function getStudentOrAbort(Request $request)
     {
         $student = $request->user()->student;
@@ -23,29 +23,111 @@ class CBTController extends Controller
         return $student;
     }
 
+    // [BARU] Helper function untuk menghitung nilai & finalize sesi
+    // Ini dipisahkan agar bisa dipanggil oleh submitTryout DAN fullscreenWarning (Auto Submit)
+    private function calculateResult(CbtSession $session)
+    {
+        // 1. Ambil semua jawaban
+        $answers = $session->answers()->with(['question.answerOptions', 'answerOption'])->get();
+        
+        $totalScore = 0;
+        $correctCount = 0;
+        $answeredCount = 0;
+
+        // 2. Loop penilaian
+        foreach ($answers as $ans) {
+            $q = $ans->question;
+            $point = 0;
+            $isCorrect = false;
+
+            // Cek apakah dijawab
+            if ($ans->answer_option_id || $ans->answer_text || !empty($ans->selected_options)) {
+                $answeredCount++;
+            }
+
+            // Logika Penilaian Berdasarkan Tipe Soal
+            if ($q->type === 'weighted') {
+                if ($ans->answer_option_id) {
+                    $selectedOpt = $q->answerOptions->where('id', $ans->answer_option_id)->first();
+                    $point = $selectedOpt ? $selectedOpt->weight : 0;
+                    $maxWeight = $q->answerOptions->max('weight');
+                    $isCorrect = $point == $maxWeight;
+                }
+            } elseif ($q->type === 'multiple') {
+                if (!empty($ans->selected_options)) {
+                    $correctIds = $q->answerOptions->where('is_correct', true)->pluck('id')->toArray();
+                    $studentIds = $ans->selected_options;
+                    
+                    $totalCorrectOptions = count($correctIds);
+                    $pointPerItem = $totalCorrectOptions > 0 ? ($q->point / $totalCorrectOptions) : 0;
+                    
+                    $matches = count(array_intersect($studentIds, $correctIds));
+                    $point = $matches * $pointPerItem;
+                    if ($point > $q->point) $point = $q->point;
+
+                    $isCorrect = ($point == $q->point);
+                }
+            } elseif ($q->type === 'short') {
+                if ($ans->answer_text) {
+                    $key = $q->answerOptions->where('is_correct', true)->first();
+                    if ($key && strtolower(trim($ans->answer_text)) === strtolower(trim($key->option_text))) {
+                        $isCorrect = true;
+                        $point = $q->point;
+                    }
+                }
+            } else {
+                // Pilihan Ganda Biasa
+                if ($ans->answer_option_id) {
+                    $isCorrect = $ans->answerOption && $ans->answerOption->is_correct;
+                    if ($isCorrect) $point = $q->point;
+                }
+            }
+
+            $ans->update([
+                'is_correct' => $isCorrect,
+                'point_earned' => $point
+            ]);
+
+            if ($isCorrect) $correctCount++;
+            $totalScore += $point;
+        }
+
+        // 3. Simpan Hasil Akhir (StudentTryoutResult)
+        $result = StudentTryoutResult::create([
+            'cbt_session_id' => $session->id,
+            'student_id' => $session->student_id,
+            'question_package_id' => $session->question_package_id,
+            'total_questions' => $answers->count(),
+            'answered_questions' => $answeredCount,
+            'correct_answers' => $correctCount,
+            'wrong_answers' => $answeredCount - $correctCount,
+            'total_score' => $totalScore,
+            'percentage' => 0, // Bisa dihitung jika perlu
+            'is_passed' => false, // Sesuaikan logic kelulusan jika ada
+            'duration_seconds' => now()->diffInSeconds($session->start_time),
+        ]);
+
+        // 4. Update Status Sesi & Cache Nilai Siswa
+        $session->update(['end_time' => now(), 'status' => 'completed']);
+        $session->student->update(['last_tryout_score' => $totalScore]);
+
+        return $result;
+    }
+
     public function availableTryouts(Request $request)
     {
         $student = $this->getStudentOrAbort($request);
-
         $studentProgramIds = $student->programs()->pluck('programs.id');
 
         $packages = QuestionPackage::with(['program', 'questions'])
             ->where('is_active', true)
             ->whereIn('program_id', $studentProgramIds)
-            
-            // Filter 1: Start Date (Sudah mulai atau Null)
             ->where(function($q) {
-                $q->whereNull('start_date')
-                  ->orWhere('start_date', '<=', now());
+                $q->whereNull('start_date')->orWhere('start_date', '<=', now());
             })
-            
-            // Filter 2: End Date (Belum berakhir atau Null)
-            // Menggunakan whereDate >= now() agar paket yang berakhir HARI INI masih muncul sampai jam 23:59
             ->where(function($q) {
-                $q->whereNull('end_date')
-                  ->orWhereDate('end_date', '>=', now());
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', now());
             })
-
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($pkg) use ($student) {
@@ -75,53 +157,47 @@ class CBTController extends Controller
         $student = $this->getStudentOrAbort($request);
         $package = QuestionPackage::findOrFail($packageId);
 
-        // 1. Cek Aktif Manual
         if (!$package->is_active) {
             return response()->json(['success' => false, 'message' => 'Paket tidak aktif'], 400);
         }
 
-        // Validasi Waktu Server (Anti Manipulasi Jam Laptop)
         $now = now(); 
-
-        // Cek Tanggal Mulai
         if ($package->start_date && $now < $package->start_date) {
-            return response()->json([
-                'success' => false, 
-                'message' => 'Ujian belum dimulai. Silakan cek jadwal.'
-            ], 403);
+            return response()->json(['success' => false, 'message' => 'Ujian belum dimulai.'], 403);
         }
-
-        // Cek Tanggal Selesai (di set batas sampai jam 23:59:59 hari tersebut)
         if ($package->end_date) {
             $deadline = \Carbon\Carbon::parse($package->end_date)->endOfDay();
-            if ($now > $deadline) {
-                return response()->json([
-                    'success' => false, 
-                    'message' => 'Periode ujian telah berakhir.'
-                ], 403);
-            }
+            if ($now > $deadline) return response()->json(['success' => false, 'message' => 'Periode ujian berakhir.'], 403);
         }
 
-        // 2. Cek Kuota Pengerjaan
-        if (!is_null($package->max_attempts)) {
-            $attemptCount = StudentTryoutResult::where('student_id', $student->id)
-                ->where('question_package_id', $package->id)
-                ->count();
-
-            if ($attemptCount >= $package->max_attempts) {
-                return response()->json([
-                    'success' => false, 
-                    'message' => "Kuota pengerjaan habis. Batas maksimal: {$package->max_attempts} kali."
-                ], 403);
-            }
-        }
-
+        // Logic Resume
         $ongoingSession = CbtSession::where('student_id', $student->id)
             ->where('status', 'ongoing')
             ->first();
 
         if ($ongoingSession) {
-            return response()->json(['success' => false, 'message' => 'Masih ada sesi aktif'], 409);
+            if ($ongoingSession->question_package_id == $package->id) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Melanjutkan sesi ujian',
+                    'data' => [
+                        'session_token' => $ongoingSession->session_token,
+                        'session_id' => $ongoingSession->id,
+                        'package' => $package,
+                        'duration_minutes' => $package->duration_minutes,
+                        'total_questions' => $package->questions()->count(),
+                        'start_time' => $ongoingSession->start_time,
+                    ]
+                ]);
+            } 
+            return response()->json(['success' => false, 'message' => 'Ada sesi lain yang belum selesai.'], 409);
+        }
+
+        if (!is_null($package->max_attempts)) {
+            $attemptCount = StudentTryoutResult::where('student_id', $student->id)
+                ->where('question_package_id', $package->id)
+                ->count();
+            if ($attemptCount >= $package->max_attempts) return response()->json(['success' => false, 'message' => 'Kuota habis.'], 403);
         }
 
         DB::beginTransaction();
@@ -153,7 +229,7 @@ class CBTController extends Controller
                     'session_id' => $session->id,
                     'package' => $package,
                     'duration_minutes' => $package->duration_minutes,
-                    'total_questions' => $package->total_questions,
+                    'total_questions' => $package->questions()->count(),
                     'start_time' => $session->start_time,
                 ]
             ]);
@@ -169,7 +245,6 @@ class CBTController extends Controller
         $session = $request->cbt_session;
         if (!$session) return response()->json(['message' => 'Sesi tidak valid'], 401);
 
-        // [FIX] Pastikan relation answerOptions diload
         $questions = $session->questionPackage->questions()
             ->with(['answerOptions']) 
             ->orderBy('order_number')
@@ -187,7 +262,6 @@ class CBTController extends Controller
                         return [
                             'id' => $option->id,
                             'label' => $option->option_label,
-                            // [FIX] Pastikan field text selalu terisi untuk menghindari null di frontend
                             'text' => $option->option_text ?? '', 
                             'image' => $option->option_image,
                         ];
@@ -228,83 +302,9 @@ class CBTController extends Controller
         $session = $request->cbt_session;
         DB::beginTransaction();
         try {
-            $answers = $session->answers()->with(['question.answerOptions', 'answerOption'])->get();
+            // [FIX] Menggunakan fungsi shared calculateResult agar logic tidak duplikat
+            $result = $this->calculateResult($session);
             
-            $totalScore = 0;
-            $correctCount = 0;
-            $answeredCount = 0;
-
-            foreach ($answers as $ans) {
-                $q = $ans->question;
-                $point = 0;
-                $isCorrect = false;
-
-                if ($ans->answer_option_id || $ans->answer_text || !empty($ans->selected_options)) {
-                    $answeredCount++;
-                }
-
-                if ($q->type === 'weighted') {
-                    if ($ans->answer_option_id) {
-                        $selectedOpt = $q->answerOptions->where('id', $ans->answer_option_id)->first();
-                        $point = $selectedOpt ? $selectedOpt->weight : 0;
-                        $maxWeight = $q->answerOptions->max('weight');
-                        $isCorrect = $point == $maxWeight;
-                    }
-                } elseif ($q->type === 'multiple') {
-                    if (!empty($ans->selected_options)) {
-                        $correctIds = $q->answerOptions->where('is_correct', true)->pluck('id')->toArray();
-                        $studentIds = $ans->selected_options;
-                        
-                        $totalCorrectOptions = count($correctIds);
-                        $pointPerItem = $totalCorrectOptions > 0 ? ($q->point / $totalCorrectOptions) : 0;
-                        
-                        $matches = count(array_intersect($studentIds, $correctIds));
-                        $point = $matches * $pointPerItem;
-                        if ($point > $q->point) $point = $q->point;
-
-                        $isCorrect = ($point == $q->point);
-                    }
-                } elseif ($q->type === 'short') {
-                    if ($ans->answer_text) {
-                        $key = $q->answerOptions->where('is_correct', true)->first();
-                        if ($key && strtolower(trim($ans->answer_text)) === strtolower(trim($key->option_text))) {
-                            $isCorrect = true;
-                            $point = $q->point;
-                        }
-                    }
-                } else {
-                    if ($ans->answer_option_id) {
-                        $isCorrect = $ans->answerOption && $ans->answerOption->is_correct;
-                        if ($isCorrect) $point = $q->point;
-                    }
-                }
-
-                $ans->update([
-                    'is_correct' => $isCorrect,
-                    'point_earned' => $point
-                ]);
-
-                if ($isCorrect) $correctCount++;
-                $totalScore += $point;
-            }
-
-            $result = StudentTryoutResult::create([
-                'cbt_session_id' => $session->id,
-                'student_id' => $session->student_id,
-                'question_package_id' => $session->question_package_id,
-                'total_questions' => $answers->count(),
-                'answered_questions' => $answeredCount,
-                'correct_answers' => $correctCount,
-                'wrong_answers' => $answeredCount - $correctCount,
-                'total_score' => $totalScore,
-                'percentage' => 0,
-                'is_passed' => false,
-                'duration_seconds' => now()->diffInSeconds($session->start_time),
-            ]);
-
-            $session->update(['end_time' => now(), 'status' => 'completed']);
-            $session->student->update(['last_tryout_score' => $totalScore]);
-
             DB::commit();
             return response()->json(['success' => true, 'data' => $result]);
 
@@ -400,10 +400,33 @@ class CBTController extends Controller
     {
         $session = $request->cbt_session;
         $session->increment('warning_count');
-        if ($session->warning_count >= 3) {
-            $session->update(['status' => 'auto_submit', 'end_time' => now()]);
-            return response()->json(['success' => false, 'message' => 'Auto submit', 'auto_submit' => true], 400);
+
+        // Batas toleransi (di sini diset >= 2 sesuai keluhan "2/2 diskualifikasi")
+        // Anda bisa mengubah angka ini menjadi 3 jika ingin 3 kali baru keluar.
+        // Frontend Anda melakukan lockout pada angka >= 2.
+        if ($session->warning_count >= 2) { 
+            
+            DB::beginTransaction();
+            try {
+                // [FIX] Hitung nilai dulu sebelum return response 400
+                $this->calculateResult($session);
+                
+                DB::commit();
+                
+                // Return 400 agar frontend tahu ini pelanggaran, 
+                // tapi data nilai sudah aman tersimpan.
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Batas peringatan tercapai. Jawaban dikumpulkan otomatis.', 
+                    'auto_submit' => true
+                ], 400);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            }
         }
+        
         return response()->json(['success' => true, 'message' => "Peringatan {$session->warning_count}"]);
     }
 }
