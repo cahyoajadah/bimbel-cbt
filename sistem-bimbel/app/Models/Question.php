@@ -13,6 +13,7 @@ class Question extends Model
 {  
     protected $fillable = [
         'question_package_id',
+        'question_category_id',
         'question_text',
         'question_image', // Pastikan kolom ini ada di migration jika digunakan
         'order_number',
@@ -103,9 +104,9 @@ class Question extends Model
 
     // --- RELATIONSHIPS ---
 
-    public function questionPackage(): BelongsTo
+    public function package(): BelongsTo
     {
-        return $this->belongsTo(QuestionPackage::class);
+        return $this->belongsTo(QuestionPackage::class, 'question_package_id');
     }
 
     public function answerOptions(): HasMany
@@ -126,5 +127,10 @@ class Question extends Model
     public function reports(): HasMany
     {
         return $this->hasMany(QuestionReport::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(QuestionCategory::class, 'question_category_id');
     }
 }

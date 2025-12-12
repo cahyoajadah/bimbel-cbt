@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, List, Calendar } from 'lucide-react';
+import { Plus, Edit, Trash2, List, Layers, X } from 'lucide-react'; // Icon Layers untuk kategori
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
@@ -16,10 +16,16 @@ export default function QuestionPackages() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
+  
+  // State Modal Paket
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState(null);
 
-  // Fetch Data Packages
+  // State Modal Kategori
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+
+  // --- DATA FETCHING ---
   const { data: packagesData, isLoading } = useQuery({
     queryKey: ['question-packages'],
     queryFn: async () => {
@@ -30,7 +36,6 @@ export default function QuestionPackages() {
 
   const packages = packagesData?.data || []; 
 
-  // Fetch Programs
   const { data: programs } = useQuery({
     queryKey: ['common-programs'], 
     queryFn: async () => {
@@ -39,14 +44,12 @@ export default function QuestionPackages() {
     },
   });
 
+  // --- FORM HANDLING (PAKET) ---
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
 
-  // Mutations
+  // --- MUTATIONS (PAKET) ---
   const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const res = await api.post(API_ENDPOINTS.QUESTION_PACKAGES, data);
-      return res.data;
-    },
+    mutationFn: (data) => api.post(API_ENDPOINTS.QUESTION_PACKAGES, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['question-packages']);
       setIsModalOpen(false);
@@ -57,10 +60,7 @@ export default function QuestionPackages() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const res = await api.put(`${API_ENDPOINTS.QUESTION_PACKAGES}/${id}`, data);
-      return res.data;
-    },
+    mutationFn: ({ id, data }) => api.put(`${API_ENDPOINTS.QUESTION_PACKAGES}/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['question-packages']);
       setIsModalOpen(false);
@@ -71,16 +71,14 @@ export default function QuestionPackages() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      await api.delete(`${API_ENDPOINTS.QUESTION_PACKAGES}/${id}`);
-    },
+    mutationFn: (id) => api.delete(`${API_ENDPOINTS.QUESTION_PACKAGES}/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries(['question-packages']);
       toast.success('Paket soal dihapus');
     },
   });
 
-  // Handlers
+  // --- HANDLERS (PAKET) ---
   const handleOpenModal = (pkg = null) => {
     if (pkg) {
       setEditingPackage(pkg);
@@ -89,21 +87,17 @@ export default function QuestionPackages() {
       setValue('description', pkg.description);
       setValue('duration_minutes', pkg.duration_minutes);
       setValue('passing_score', pkg.passing_score);
-      
-      // [MODIFIED] Set nilai max_attempts
       setValue('max_attempts', pkg.max_attempts);
-      
       setValue('start_date', pkg.start_date ? pkg.start_date.split('T')[0] : '');
       setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');
-      
       setValue('is_active', pkg.is_active);
     } else {
       setEditingPackage(null);
       reset({ 
           is_active: true, 
           duration_minutes: 120, 
-          passing_score: 65,
-          max_attempts: '', // Default kosong (unlimited)
+          passing_score: 0, // Default 0 karena passing grade dipindah ke kategori (opsional)
+          max_attempts: '',
           start_date: '',
           end_date: ''
       });
@@ -125,17 +119,104 @@ export default function QuestionPackages() {
     const payload = { ...data };
     if (!payload.start_date) payload.start_date = null;
     if (!payload.end_date) payload.end_date = null;
-    
-    // [MODIFIED] Handle max_attempts: kosong string/0 menjadi null
-    if (!payload.max_attempts || payload.max_attempts == 0) {
-        payload.max_attempts = null;
-    }
+    if (!payload.max_attempts || payload.max_attempts == 0) payload.max_attempts = null;
 
     if (editingPackage) {
       updateMutation.mutate({ id: editingPackage.id, data: payload });
     } else {
       createMutation.mutate(payload);
     }
+  };
+
+  // --- MANAJEMEN KATEGORI ---
+  const handleManageCategories = (pkg) => {
+    setSelectedPackage(pkg);
+    setIsCategoryModalOpen(true);
+  };
+
+  const CategoryManager = ({ pkg }) => {
+    const { register: regCat, handleSubmit: submitCat, reset: resetCat } = useForm();
+    const queryClient = useQueryClient();
+
+    // Fetch detail paket (termasuk categories) terbaru
+    const { data: pkgDetail, isLoading: isLoadingCat } = useQuery({
+        queryKey: ['question-package-detail', pkg.id],
+        queryFn: async () => {
+            const res = await api.get(`${API_ENDPOINTS.QUESTION_PACKAGES}/${pkg.id}`);
+            return res.data.data;
+        }
+    });
+
+    const addCategoryMutation = useMutation({
+        mutationFn: (data) => api.post(`${API_ENDPOINTS.QUESTION_PACKAGES}/${pkg.id}/categories`, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['question-package-detail', pkg.id]);
+            resetCat();
+            toast.success('Kategori ditambahkan');
+        },
+        onError: (err) => toast.error(err.response?.data?.message || 'Gagal tambah kategori')
+    });
+
+    const deleteCategoryMutation = useMutation({
+        mutationFn: (catId) => api.delete(`${API_ENDPOINTS.QUESTION_PACKAGES}/${pkg.id}/categories/${catId}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['question-package-detail', pkg.id]);
+            toast.success('Kategori dihapus');
+        },
+        onError: (err) => toast.error(err.response?.data?.message || 'Gagal hapus kategori')
+    });
+
+    const onAddCategory = (data) => {
+        addCategoryMutation.mutate(data);
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Form Tambah Kategori */}
+            <form onSubmit={submitCat(onAddCategory)} className="flex gap-3 items-end bg-gray-50 p-4 rounded-lg border">
+                <div className="flex-1">
+                    <Input label="Nama Kategori" placeholder="Contoh: TIU" {...regCat('name', { required: true })} className="bg-white" />
+                </div>
+                <div className="w-32">
+                    <Input label="Passing Grade" type="number" placeholder="0" {...regCat('passing_grade', { required: true })} className="bg-white" />
+                </div>
+                <Button type="submit" loading={addCategoryMutation.isPending} icon={Plus}>Tambah</Button>
+            </form>
+
+            {/* List Kategori */}
+            <div>
+                <h3 className="font-bold text-gray-700 mb-2">Daftar Kategori</h3>
+                {isLoadingCat ? <p>Loading...</p> : (
+                    <div className="space-y-2">
+                        {pkgDetail?.categories?.length > 0 ? pkgDetail.categories.map((cat) => (
+                            <div key={cat.id} className="flex justify-between items-center p-3 border rounded bg-white shadow-sm">
+                                <div>
+                                    <span className="font-semibold text-gray-800">{cat.name}</span>
+                                    <span className="ml-3 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                        PG: {cat.passing_grade}
+                                    </span>
+                                </div>
+                                <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-red-500 hover:bg-red-50"
+                                    onClick={() => {
+                                        if(confirm('Hapus kategori ini? Soal di dalamnya mungkin akan hilang/error.')) {
+                                            deleteCategoryMutation.mutate(cat.id);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 size={16} />
+                                </Button>
+                            </div>
+                        )) : (
+                            <p className="text-gray-500 text-sm italic">Belum ada kategori.</p>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
   };
 
   const columns = [
@@ -149,7 +230,6 @@ export default function QuestionPackages() {
       )
     },
     { header: 'Durasi', accessor: 'duration_minutes', render: (row) => `${row.duration_minutes} Menit` },
-    // [NEW] Kolom Batas Pengerjaan (Opsional, agar admin bisa lihat di tabel)
     { 
       header: 'Limit', 
       render: (row) => (
@@ -169,16 +249,19 @@ export default function QuestionPackages() {
     {
       header: 'Aksi',
       render: (row) => (
-        <div className="flex space-x-2">
-          <Button size="sm" variant="outline" icon={List} onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)}>
+        <div className="flex space-x-1">
+          {/* Tombol Kelola Soal */}
+          <Button size="sm" variant="outline" icon={List} onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)} title="Kelola Soal">
             Soal
           </Button>
-          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)}>
-            Edit
+          
+          {/* Tombol Kelola Kategori */}
+          <Button size="sm" variant="outline" icon={Layers} onClick={() => handleManageCategories(row)} title="Kelola Kategori">
+            Kategori
           </Button>
-          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50">
-            Hapus
-          </Button>
+
+          <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
+          <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
         </div>
       ),
     },
@@ -187,7 +270,7 @@ export default function QuestionPackages() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-800">Bank Soal</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Bank Soal & Paket</h1>
         <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Paket Baru</Button>
       </div>
 
@@ -195,13 +278,13 @@ export default function QuestionPackages() {
         <Table columns={columns} data={packages} loading={isLoading} />
       </div>
 
+      {/* MODAL BUAT/EDIT PAKET */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingPackage ? 'Edit Paket Soal' : 'Buat Paket Soal Baru'}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          
           <Input label="Nama Paket" placeholder="Contoh: Tryout SKD 1" {...register('name', { required: 'Nama wajib diisi' })} />
           
           <div>
@@ -216,62 +299,34 @@ export default function QuestionPackages() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input 
-                type="number" 
-                label="Durasi (Menit)" 
-                {...register('duration_minutes', { required: true, min: 1 })} 
-            />
-            <Input 
-                type="number" 
-                label="KKM / Passing Score" 
-                {...register('passing_score', { required: true, min: 0 })} 
-            />
+            <Input type="number" label="Durasi Total (Menit)" {...register('duration_minutes', { required: true, min: 1 })} />
+            <Input type="number" label="Passing Score Global" placeholder="Opsional" {...register('passing_score')} />
           </div>
 
-          {/* [NEW] Input Batas Pengerjaan */}
           <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-            <Input 
-                type="number" 
-                label="Batas Pengerjaan (Kali)" 
-                placeholder="Kosongkan jika unlimited"
-                {...register('max_attempts', { min: 1 })} 
-                className="bg-white"
-            />
-            <p className="text-xs text-yellow-800 mt-1">
-                * Kosongkan atau isi 0 jika siswa diperbolehkan mengerjakan berulang kali tanpa batas.
-            </p>
+            <Input type="number" label="Batas Pengerjaan (Kali)" placeholder="0 = Unlimited" {...register('max_attempts')} className="bg-white" />
           </div>
 
-          <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-              <label className="block text-sm font-bold text-blue-800 mb-2">Periode Aktif (Opsional)</label>
-              <div className="grid grid-cols-2 gap-4">
-                <Input type="date" label="Mulai Tanggal" {...register('start_date')} className="bg-white" />
-                <Input type="date" label="Sampai Tanggal" {...register('end_date')} className="bg-white" />
-              </div>
-              <p className="text-xs text-blue-600 mt-1">* Kosongkan jika paket ini berlaku selamanya.</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Deskripsi</label>
-            <textarea 
-                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-2 border" 
-                rows="2" 
-                {...register('description')}
-            ></textarea>
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pt-2">
             <input type="checkbox" id="isActive" {...register('is_active')} className="rounded text-blue-600" />
             <label htmlFor="isActive" className="text-sm text-gray-700">Paket Aktif</label>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
-            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
-              {editingPackage ? 'Simpan' : 'Buat Paket'}
-            </Button>
+            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>Simpan</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* MODAL MANAJEMEN KATEGORI */}
+      <Modal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        title={`Kategori Soal: ${selectedPackage?.name}`}
+        size="lg"
+      >
+        {selectedPackage && <CategoryManager pkg={selectedPackage} />}
       </Modal>
     </div>
   );

@@ -8,23 +8,36 @@ class StoreQuestionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // Ubah jadi true agar bisa dipakai
+        return true;
+    }
+
+    // [FIX] Method ini penting agar parameter dari URL (packageId)
+    // digabung ke dalam data request sebelum validasi berjalan.
+    protected function prepareForValidation()
+    {
+        // Ambil 'packageId' dari route (URL) dan masukkan sebagai 'question_package_id'
+        if ($this->route('packageId')) {
+            $this->merge([
+                'question_package_id' => $this->route('packageId'),
+            ]);
+        }
     }
 
     public function rules(): array
     {
         return [
-            'type' => 'required|in:single,multiple,weighted,short',
+            'question_package_id' => 'required|exists:question_packages,id',
+            'question_category_id' => 'required|exists:question_categories,id',
+            'type' => 'required|in:single,multiple,short,weighted', // Sesuaikan dengan enum frontend
             'question_text' => 'required|string',
             'question_image' => 'nullable|image|max:2048',
-            'point' => 'required|integer|min:0',
-            'explanation' => 'nullable|string',
+            'point' => 'required|numeric|min:0',
             
-            // Validasi Opsi
-            'options' => 'required|array|min:1',
-            'options.*.option_text' => 'nullable|string', // Boleh null jika gambar ada
-            'options.*.is_correct' => 'required', // Bisa boolean atau string "true"/"false"
-            'options.*.weight' => 'nullable|integer',
+            'options' => 'nullable|array',
+            'options.*.label' => 'nullable|string',
+            'options.*.text' => 'nullable|string',
+            'options.*.is_correct' => 'nullable|boolean',
+            'options.*.weight' => 'nullable|numeric',
         ];
     }
 }

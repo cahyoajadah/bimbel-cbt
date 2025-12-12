@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Admin\DashboardController as AdminDashboard;
-use App\Http\Controllers\Api\Admin\PackageController;
 use App\Http\Controllers\Api\Admin\SubjectController as AdminSubjectController;
 use App\Http\Controllers\Api\Admin\MaterialController;
 use App\Http\Controllers\Api\Admin\ProgramController;
@@ -24,6 +23,9 @@ use App\Http\Controllers\Api\Student\ClassController;
 use App\Http\Controllers\Api\Student\CBTController;
 use App\Http\Controllers\Api\Student\AnnouncementController as StudentAnnouncement;
 use App\Http\Controllers\Api\Public\LandingController;
+// [FIX 1] Import Controller Ranking & Middleware CBT
+use App\Http\Controllers\Api\Common\RankingController; 
+use App\Http\Middleware\CBTSessionMiddleware; 
 
 // PUBLIC ROUTES
 Route::prefix('public')->group(function () {
@@ -31,11 +33,9 @@ Route::prefix('public')->group(function () {
     Route::get('testimonies', [LandingController::class, 'testimonies']);
     Route::get('features', [LandingController::class, 'features']);
     Route::get('faq', [LandingController::class, 'faq']);
-
-    // [BARU] Route untuk Galeri dan Blog Publik
     Route::get('gallery', [LandingController::class, 'gallery']);
     Route::get('blog', [LandingController::class, 'blog']);
-    Route::get('blog/{id}', [LandingController::class, 'showBlog']); // Detail blog
+    Route::get('blog/{id}', [LandingController::class, 'showBlog']);
 });
 
 // AUTH ROUTES
@@ -55,11 +55,6 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
     ->prefix('admin')
     ->group(function () {
         Route::get('dashboard', [AdminDashboard::class, 'index']);
-        
-        // Packages (Hapus resource Packages jika tidak dipakai di API lagi, tapi biarkan jika QuestionMaker pakai model yang sama,
-        // tapi instruksinya hapus dari admin management. Kita hapus routenya dari sini.)
-        // Route::apiResource('packages', PackageController::class); 
-        
         Route::apiResource('materials', MaterialController::class);
         Route::apiResource('schedules', ScheduleController::class);
         Route::apiResource('subjects', AdminSubjectController::class);
@@ -67,6 +62,7 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::apiResource('teachers', TeacherController::class);
         Route::apiResource('announcements', AdminAnnouncement::class);
         Route::apiResource('landing-contents', \App\Http\Controllers\Api\Admin\LandingContentController::class);
+        
         // Students
         Route::apiResource('students', StudentController::class);
         Route::get('students/{id}/programs', [StudentController::class, 'getPrograms']);
@@ -74,11 +70,9 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::get('students/{id}/attendance', [StudentController::class, 'getAttendance']);
         Route::post('students/{id}/attendance', [StudentController::class, 'recordAttendance']);
         Route::post('students/{id}/send-credentials', [StudentController::class, 'sendAccountInfo']);
-        
-        // [BARU] Route Detail Progress untuk Monitoring
         Route::get('students/{id}/progress-detail', [StudentController::class, 'progressDetail']);
         
-        // Feedback (Endpoint untuk kirim feedback)
+        // Feedback
         Route::get('feedbacks', [FeedbackController::class, 'index']);
         Route::post('feedbacks', [FeedbackController::class, 'store']);
         Route::get('feedbacks/{id}', [FeedbackController::class, 'show']);
@@ -91,11 +85,19 @@ Route::middleware(['auth:sanctum', 'role:pembuat_soal'])
     ->prefix('question-maker')
     ->group(function () {
         Route::apiResource('packages', QuestionPackageController::class);
+        
+        // Routes Kategori
+        Route::post('packages/{packageId}/categories', [QuestionPackageController::class, 'addCategory']);
+        Route::put('packages/{packageId}/categories/{categoryId}', [QuestionPackageController::class, 'updateCategory']);
+        Route::delete('packages/{packageId}/categories/{categoryId}', [QuestionPackageController::class, 'deleteCategory']);
+
+        // Routes Soal
         Route::get('packages/{packageId}/questions', [QuestionController::class, 'index']);
         Route::post('packages/{packageId}/questions', [QuestionController::class, 'store']);
         Route::get('packages/{packageId}/questions/{id}', [QuestionController::class, 'show']);
         Route::put('packages/{packageId}/questions/{id}', [QuestionController::class, 'update']);
         Route::delete('packages/{packageId}/questions/{id}', [QuestionController::class, 'destroy']);
+        
         Route::get('reports', [QuestionReportController::class, 'index']);
         Route::post('reports/{id}/respond', [QuestionReportController::class, 'respond']);
     });
@@ -117,24 +119,24 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         Route::get('announcements', [StudentAnnouncement::class, 'index']);
         Route::get('announcements/recent', [StudentAnnouncement::class, 'recent']);
         Route::post('announcements/{id}/read', [StudentAnnouncement::class, 'markAsRead']);
-        
-        // [BARU] Feedback untuk Siswa
         Route::get('feedbacks', [StudentDashboardController::class, 'feedbacks']);
         
+        // CBT Menu Utama
         Route::get('tryouts', [CBTController::class, 'availableTryouts']);
         Route::post('tryouts/{packageId}/start', [CBTController::class, 'startSession']);
         Route::get('tryout-results/{resultId}', [CBTController::class, 'reviewResult']);
         Route::post('questions/report', [CBTController::class, 'reportQuestion']);
-    });
 
-// CBT SESSION ROUTES
-Route::middleware(['auth:sanctum', 'role:siswa', 'cbt.session'])
-    ->prefix('cbt')
-    ->group(function () {
-        Route::get('questions', [CBTController::class, 'getQuestions']);
-        Route::post('answer', [CBTController::class, 'saveAnswer']);
-        Route::post('submit', [CBTController::class, 'submitTryout']);
-        Route::post('fullscreen-warning', [CBTController::class, 'fullscreenWarning']);
+        // [FIX 2] Nested CBT Routes (Agar URL sesuai dengan frontend /api/student/cbt/...)
+        Route::middleware([CBTSessionMiddleware::class])
+            ->prefix('cbt')
+            ->group(function () {
+                Route::get('questions', [CBTController::class, 'getQuestions']);
+                // Frontend pakai 'save-answer', samakan di sini
+                Route::post('save-answer', [CBTController::class, 'saveAnswer']); 
+                Route::post('submit', [CBTController::class, 'submitTryout']);
+                Route::post('fullscreen-warning', [CBTController::class, 'fullscreenWarning']);
+            });
     });
 
 // COMMON ROUTES
@@ -146,4 +148,7 @@ Route::middleware('auth:sanctum')->group(function () {
         return response()->json(['success' => true, 'data' => \App\Models\Subject::with('program')->get()]);
     });
     Route::post('/upload-image', [UploadController::class, 'uploadImage']);
+    
+    // Route Ranking
+    Route::get('/ranking/{packageId}', [RankingController::class, 'getPackageRanking']);
 });

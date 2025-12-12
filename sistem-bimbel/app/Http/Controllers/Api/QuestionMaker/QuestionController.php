@@ -4,93 +4,74 @@ namespace App\Http\Controllers\Api\QuestionMaker;
 
 use App\Http\Controllers\Controller;
 use App\Models\Question;
-use App\Models\QuestionPackage;
+use App\Models\AnswerOption;
+use App\Http\Requests\StoreQuestionRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 
 class QuestionController extends Controller
 {
     public function index($packageId)
     {
-        $package = QuestionPackage::findOrFail($packageId);
-        
-        // [FIX] Tambahkan with('answerOptions') di sini!
-        // Tanpa ini, frontend tidak akan menerima data opsi jawaban saat tombol Edit ditekan
-        $questions = $package->questions()
-                             ->with('answerOptions') 
-                             ->orderBy('order_number')
-                             ->get();
+        // [FIX] Eager load 'category' agar namanya bisa diambil di frontend
+        $questions = Question::with(['category', 'answerOptions'])
+            ->where('question_package_id', $packageId)
+            ->orderBy('order_number')
+            ->get();
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'package' => $package,
-                'questions' => $questions
-            ]
+            'data' => $questions
         ]);
     }
 
-    public function store(Request $request, $packageId)
+    public function store(StoreQuestionRequest $request, $packageId)
     {
-        $package = QuestionPackage::findOrFail($packageId);
-
-        $validator = Validator::make($request->all(), [
-            'type' => 'required|in:single,multiple,weighted,short',
-            'question_text' => 'required|string',
-            'point' => 'required|numeric|min:0',
-            'duration_seconds' => 'nullable|integer|min:0',
-            'explanation' => 'nullable|string',
-            'options' => 'nullable|array',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
         DB::beginTransaction();
         try {
-            // Tentukan nomor urut otomatis
-            $lastOrder = $package->questions()->max('order_number') ?? 0;
+            $imagePath = null;
+            if ($request->hasFile('question_image')) {
+                $imagePath = $request->file('question_image')->store('questions', 'public');
+            }
 
-            $question = $package->questions()->create([
+            // [FIX] Gunakan $packageId dari route parameter agar aman
+            $question = Question::create([
+                'question_package_id' => $packageId,
+                'question_category_id' => $request->question_category_id,
                 'type' => $request->type,
                 'question_text' => $request->question_text,
+                'question_image' => $imagePath,
                 'point' => $request->point,
-                'duration_seconds' => $request->duration_seconds ?? 60,
-                'explanation' => $request->explanation,
-                'order_number' => $lastOrder + 1,
+                'order_number' => Question::where('question_package_id', $packageId)->count() + 1,
+                'explanation' => $request->discussion ?? $request->explanation,
             ]);
 
-            // Simpan Opsi Jawaban
-            if ($request->has('options')) {
+            if ($request->has('options') && is_array($request->options)) {
                 foreach ($request->options as $opt) {
-                    $question->answerOptions()->create([
+                    AnswerOption::create([
+                        'question_id' => $question->id,
                         'option_label' => $opt['label'] ?? null,
-                        'option_text' => $opt['option_text'] ?? $opt['text'] ?? '', 
+                        'option_text' => $opt['text'] ?? '',
                         'is_correct' => $opt['is_correct'] ?? false,
                         'weight' => $opt['weight'] ?? 0,
                     ]);
                 }
             }
 
-            DB::commit();
+            $question->load('category');
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Soal berhasil ditambahkan',
-                'data' => $question->load('answerOptions')
-            ], 201);
+            DB::commit();
+            return response()->json(['success' => true, 'message' => 'Soal berhasil dibuat', 'data' => $question]);
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['success' => false, 'message' => 'Gagal menyimpan soal: ' . $e->getMessage()], 500);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
     public function show($packageId, $id)
     {
-        $question = Question::with('answerOptions')
+        $question = Question::with(['answerOptions', 'category'])
             ->where('question_package_id', $packageId)
             ->findOrFail($id);
 
@@ -100,67 +81,52 @@ class QuestionController extends Controller
     public function update(Request $request, $packageId, $id)
     {
         $question = Question::where('question_package_id', $packageId)->findOrFail($id);
-
-        $validator = Validator::make($request->all(), [
-            'type' => 'required|in:single,multiple,weighted,short',
-            'question_text' => 'required|string',
-            'point' => 'required|numeric|min:0',
-            'duration_seconds' => 'nullable|integer|min:0',
-            'explanation' => 'nullable|string',
-            'options' => 'nullable|array',
+        
+        // Pastikan validasi ada
+        $request->validate([
+            'question_category_id' => 'required|exists:question_categories,id',
+            'question_text' => 'required',
         ]);
 
-        if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
-
-        DB::beginTransaction();
-        try {
-            $question->update([
-                'type' => $request->type,
-                'question_text' => $request->question_text,
-                'point' => $request->point,
-                'duration_seconds' => $request->duration_seconds,
-                'explanation' => $request->explanation,
-            ]);
-
-            // Update Opsi: Hapus semua lalu buat ulang
-            if ($request->has('options')) {
-                $question->answerOptions()->delete();
-                
-                foreach ($request->options as $opt) {
-                    $question->answerOptions()->create([
-                        'option_label' => $opt['label'] ?? null,
-                        'option_text' => $opt['option_text'] ?? $opt['text'] ?? '',
-                        'is_correct' => $opt['is_correct'] ?? false,
-                        'weight' => $opt['weight'] ?? 0,
-                    ]);
-                }
-            }
-
-            DB::commit();
-            return response()->json([
-                'success' => true, 
-                'message' => 'Soal berhasil diperbarui', 
-                'data' => $question->load('answerOptions')
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => 'Gagal update: ' . $e->getMessage()], 500);
+        $dataToUpdate = $request->only([
+            'question_category_id', // [FIX] Pastikan field ini di-update
+            'type', 
+            'question_text', 
+            'point',
+            'explanation'
+        ]);
+        
+        // Handle Explanation/Discussion field naming
+        if ($request->has('discussion')) {
+            $dataToUpdate['explanation'] = $request->discussion;
         }
+
+        if ($request->hasFile('question_image')) {
+            $dataToUpdate['question_image'] = $request->file('question_image')->store('questions', 'public');
+        }
+
+        $question->update($dataToUpdate);
+
+        if ($request->has('options')) {
+            $question->answerOptions()->delete();
+            foreach ($request->options as $opt) {
+                AnswerOption::create([
+                    'question_id' => $question->id,
+                    'option_label' => $opt['label'] ?? null,
+                    'option_text' => $opt['text'] ?? '',
+                    'is_correct' => $opt['is_correct'] ?? false,
+                    'weight' => $opt['weight'] ?? 0,
+                ]);
+            }
+        }
+
+        return response()->json(['success' => true, 'message' => 'Soal diperbarui']);
     }
 
     public function destroy($packageId, $id)
     {
         $question = Question::where('question_package_id', $packageId)->findOrFail($id);
-        
-        DB::beginTransaction();
-        try {
-            $question->delete(); 
-            DB::commit();
-            return response()->json(['success' => true, 'message' => 'Soal berhasil dihapus']);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => 'Gagal menghapus: ' . $e->getMessage()], 500);
-        }
+        $question->delete();
+        return response()->json(['success' => true, 'message' => 'Soal dihapus']);
     }
 }

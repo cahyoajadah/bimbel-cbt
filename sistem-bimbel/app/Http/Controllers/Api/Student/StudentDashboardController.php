@@ -9,45 +9,30 @@ use App\Models\StudentTryoutResult;
 
 class StudentDashboardController extends Controller
 {
+    // ... method index tetap sama ...
     public function index(Request $request)
     {
         $student = $request->user()->student;
         $programIds = $student->programs()->pluck('programs.id');
 
-        // 1. Hitung Statistik Dashboard
-        $completedMaterials = $student->materials()
-            ->wherePivot('is_completed', true)
-            ->count();
-
+        // Statistik Dashboard
+        $completedMaterials = $student->materials()->wherePivot('is_completed', true)->count();
         $avgScore = $student->tryoutResults()->avg('total_score') ?? 0;
 
-        // Hitung Kehadiran
+        // Kehadiran
         $totalClassesPassed = Schedule::whereIn('program_id', $programIds)
-            ->where('type', 'class')
-            ->where('start_time', '<', now())
-            ->count();
-            
+            ->where('type', 'class')->where('start_time', '<', now())->count();
         $totalAttended = $student->attendances()->where('status', 'present')->count();
-        
-        $attendanceRate = $totalClassesPassed > 0 
-            ? round(($totalAttended / $totalClassesPassed) * 100) 
-            : 0;
+        $attendanceRate = $totalClassesPassed > 0 ? round(($totalAttended / $totalClassesPassed) * 100) : 0;
 
-        // 2. Jadwal Akan Datang (Kelas & Tryout)
+        // Jadwal & Tryout Terakhir
         $upcomingSchedules = Schedule::with(['subject', 'teacher'])
-            ->where('is_active', true)
-            ->whereIn('program_id', $programIds)
-            ->where('start_time', '>=', now()->startOfDay()) 
-            ->orderBy('start_time', 'asc')
-            ->limit(5)
-            ->get();
+            ->where('is_active', true)->whereIn('program_id', $programIds)
+            ->where('start_time', '>=', now()->startOfDay())
+            ->orderBy('start_time', 'asc')->limit(5)->get();
 
-        // 3. Hasil Tryout Terakhir
         $recentTryouts = StudentTryoutResult::with('questionPackage')
-            ->where('student_id', $student->id)
-            ->orderBy('created_at', 'desc')
-            ->limit(5)
-            ->get();
+            ->where('student_id', $student->id)->orderBy('created_at', 'desc')->limit(5)->get();
 
         return response()->json([
             'success' => true,
@@ -63,38 +48,38 @@ class StudentDashboardController extends Controller
         ]);
     }
 
-    // [PERBAIKAN METHOD PROGRESS]
     public function progress(Request $request)
     {
         $student = $request->user()->student;
 
-        // 1. Ambil Riwayat Tryout & Format Sesuai Frontend
         $history = $student->tryoutResults()
-            ->with(['questionPackage.program'])
+            ->with(['questionPackage.program', 'questionPackage.questions'])
             ->orderBy('created_at', 'desc')
             ->get()
             ->map(function ($result) {
-                
-                // [FIX LOGIKA LULUS]: Hitung ulang status Lulus berdasarkan Nilai vs KKM
-                // Ini memperbaiki data lama yang mungkin salah status
-                $passingScore = $result->questionPackage->passing_score ?? 0;
-                $isPassed = $result->total_score >= $passingScore;
+                $pkg = $result->questionPackage;
+                $maxScore = $pkg ? $pkg->questions->sum('point') : 0;
+
+                // [FIX] Decode category_scores dari JSON string ke Array
+                $categoryScores = $result->category_scores ? json_decode($result->category_scores) : [];
 
                 return [
                     'id' => $result->id,
-                    'package_name' => $result->questionPackage->name ?? 'Paket Tidak Ditemukan',
-                    'program_name' => $result->questionPackage->program->name ?? '-',
+                    'package_id' => $pkg->id ?? null, // Tambahkan ID Paket untuk link ranking
+                    'package_name' => $pkg->name ?? 'Paket Tidak Ditemukan',
+                    'program_name' => $pkg->program->name ?? '-',
                     'date' => $result->created_at->translatedFormat('d F Y H:i'),
                     'score' => $result->total_score,
-                    'is_passed' => $isPassed, // Gunakan hasil perhitungan baru
+                    'max_score' => $maxScore,
+                    'is_passed' => (bool) $result->is_passed,
+                    // [BARU] Kirim detail nilai kategori
+                    'category_scores' => $categoryScores 
                 ];
             });
 
-        // 2. Hitung Statistik Summary (Tanpa Jam Belajar)
         $summary = [
             'average_score' => round($student->tryoutResults()->avg('total_score') ?? 0, 1),
             'completed_tryouts' => $student->tryoutResults()->count(),
-            // 'total_study_hours' dihapus
         ];
 
         return response()->json([
@@ -105,7 +90,8 @@ class StudentDashboardController extends Controller
             ]
         ]);
     }
-
+    
+    // ... method feedbacks tetap sama ...
     public function feedbacks(Request $request)
     {
         $student = $request->user()->student;

@@ -1,11 +1,11 @@
 <?php
-// ============================================
-// app/Models/QuestionPackage.php
-// ============================================
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class QuestionPackage extends Model
 {
@@ -19,37 +19,39 @@ class QuestionPackage extends Model
         'passing_score',
         'max_attempts',
         'start_date',
-        'end_date',   
-        'is_active'
+        'end_date',
+        'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'start_date' => 'date', // Auto convert ke Carbon Date
-        'end_date' => 'date',
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
     ];
 
-    public function program()
+    public function program(): BelongsTo
     {
         return $this->belongsTo(Program::class);
     }
 
-    public function questions()
+    public function questions(): HasMany
     {
         return $this->hasMany(Question::class);
     }
 
-    // Helper untuk cek apakah paket sedang aktif berdasarkan tanggal
+    // [PENTING] Tambahkan method ini agar error 500 hilang
+    public function categories(): HasMany
+    {
+        return $this->hasMany(QuestionCategory::class);
+    }
+
+    // Helper function
     public function isAvailable()
     {
-        $now = now()->startOfDay();
-        
-        // Jika tanggal tidak diisi, dianggap selalu aktif
+        $now = now();
         if (!$this->start_date && !$this->end_date) return true;
-
-        $start = $this->start_date ? $this->start_date->startOfDay() : $now;
-        $end = $this->end_date ? $this->end_date->endOfDay() : $now->addYears(100);
-
+        $start = $this->start_date ? $this->start_date : $now->copy()->subDay();
+        $end = $this->end_date ? $this->end_date : $now->copy()->addYears(100);
         return $now->between($start, $end);
     }
 }

@@ -1,6 +1,5 @@
-// src/pages/student/Progress.jsx
 import { useQuery } from '@tanstack/react-query';
-import { Award, TrendingUp, Clock, Calendar, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Award, TrendingUp, Clock, Calendar, CheckCircle, XCircle, Eye } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
@@ -84,8 +83,7 @@ export default function Progress() {
                 <th className="px-6 py-4 font-semibold">Tanggal & Waktu</th>
                 <th className="px-6 py-4 font-semibold">Status Kelulusan</th>
                 <th className="px-6 py-4 font-semibold">Nilai Akhir</th>
-                {/* [PERBAIKAN] Menggunakan text-left agar rata kiri */}
-                <th className="px-6 py-4 font-semibold text-center">Aksi</th>
+                <th className="px-6 py-4 font-semibold text-left">Aksi</th>
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-gray-100">
@@ -115,10 +113,10 @@ export default function Progress() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-lg font-bold text-gray-800">{item.score}</span>
-                      <span className="text-xs text-gray-400 ml-1">/ 100</span>
+                      {/* [FIX] Menampilkan Max Score dari Backend */}
+                      <span className="text-xs text-gray-400 ml-1">/ {item.max_score}</span>
                     </td>
-                    {/* [PERBAIKAN] Menggunakan text-left agar tombol rata kiri */}
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-left">
                       <Button 
                         variant="outline" 
                         size="sm"
