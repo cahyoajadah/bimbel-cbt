@@ -127,6 +127,11 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         Route::post('tryouts/{packageId}/start', [CBTController::class, 'startSession']);
         Route::get('tryout-results/{resultId}', [CBTController::class, 'reviewResult']);
         Route::post('questions/report', [CBTController::class, 'reportQuestion']);
+
+        // [BARU] Route Perangkingan
+        Route::get('/rankings/packages', [App\Http\Controllers\Api\Student\RankingController::class, 'index']);
+        Route::get('/rankings/{packageId}', [App\Http\Controllers\Api\Student\RankingController::class, 'show']);
+
     });
 
 // CBT SESSION ROUTES

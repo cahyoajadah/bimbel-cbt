@@ -88,18 +88,26 @@ export default function QuestionPackages() {
       setValue('name', pkg.name);
       setValue('description', pkg.description);
       setValue('duration_minutes', pkg.duration_minutes);
-      setValue('passing_score', pkg.passing_score);
       
-      // [MODIFIED] Set nilai max_attempts
+      // [PERBAIKAN] Set Passing Grade Total & Kategori
+      setValue('passing_score', pkg.passing_score);
+      setValue('passing_grade_twk', pkg.passing_grade_twk || 0);
+      setValue('passing_grade_tiu', pkg.passing_grade_tiu || 0);
+      setValue('passing_grade_tkp', pkg.passing_grade_tkp || 0);
+      
       setValue('max_attempts', pkg.max_attempts);
       
       setValue('start_date', pkg.start_date ? pkg.start_date.split('T')[0] : '');
       setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');      
     } else {
       setEditingPackage(null);
+      // [PERBAIKAN] Reset form dengan default value yang benar
       reset({ 
           duration_minutes: 120, 
-          passing_score: 65,
+          passing_score: 0,
+          passing_grade_twk: 0,
+          passing_grade_tiu: 0,
+          passing_grade_tkp: 0,
           max_attempts: '', // Default kosong (unlimited)
           start_date: '',
           end_date: ''
@@ -119,7 +127,6 @@ export default function QuestionPackages() {
   };
 
   const onSubmit = (data) => {
-    // [PERUBAHAN] Kita paksa is_active menjadi true secara manual
     const payload = { ...data, is_active: true }; 
     
     if (!payload.start_date) payload.start_date = null;
@@ -155,45 +162,23 @@ export default function QuestionPackages() {
         </span>
       )
     },
-    // --- BAGIAN LOGIKA WAKTU (Otomatis) ---
     { 
       header: 'Status', 
       render: (row) => {
         const now = new Date();
         const startDate = row.start_date ? new Date(row.start_date) : null;
-        
-        // Set batas akhir ke jam 23:59:59 agar berlaku sampai tengah malam
         const endDate = row.end_date ? new Date(row.end_date) : null;
         if(endDate) endDate.setHours(23, 59, 59, 999);
 
-        // Cek 1: Apakah belum mulai?
         if (startDate && now < startDate) {
-            return (
-                <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                    Belum Mulai
-                </span>
-            );
+            return <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">Belum Mulai</span>;
         }
-
-        // Cek 2: Apakah sudah lewat?
         if (endDate && now > endDate) {
-            return (
-                <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-                    Selesai
-                </span>
-            );
+            return <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">Selesai</span>;
         }
-
-        // Cek 3: Default (Tersedia)
-        // Karena tombol manual sudah dihapus, kita anggap sisanya adalah 'Tersedia'
-        return (
-            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                Tersedia
-            </span>
-        );
+        return <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Tersedia</span>;
       }
     },
-    // -------------------------------------
     {
       header: 'Aksi',
       render: (row) => (
@@ -249,14 +234,44 @@ export default function QuestionPackages() {
                 label="Durasi (Menit)" 
                 {...register('duration_minutes', { required: true, min: 1 })} 
             />
-            <Input 
-                type="number" 
-                label="KKM / Passing Score" 
-                {...register('passing_score', { required: true, min: 0 })} 
-            />
           </div>
 
-          {/* [NEW] Input Batas Pengerjaan */}
+          {/* [PERBAIKAN] Input Passing Grade SKD menggunakan register React Hook Form */}
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h4 className="text-sm font-bold text-gray-700 mb-3">Pengaturan Passing Grade (SKD)</h4>
+            <div className="grid grid-cols-2 gap-4">
+                <Input
+                    label="Min. TWK"
+                    type="number"
+                    {...register('passing_grade_twk')}
+                    className="bg-white"
+                    placeholder="0"
+                />
+                <Input
+                    label="Min. TIU"
+                    type="number"
+                    {...register('passing_grade_tiu')}
+                    className="bg-white"
+                    placeholder="0"
+                />
+                <Input
+                    label="Min. TKP"
+                    type="number"
+                    {...register('passing_grade_tkp')}
+                    className="bg-white"
+                    placeholder="0"
+                />
+                <Input
+                    label="Min. Total"
+                    type="number"
+                    {...register('passing_score')}
+                    className="bg-white"
+                    placeholder="0"
+                />
+            </div>
+            <p className="text-xs text-gray-500 mt-2">* Isi 0 jika tidak ada passing grade khusus.</p>
+          </div>
+
           <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
             <Input 
                 type="number" 

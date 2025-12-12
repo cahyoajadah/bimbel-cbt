@@ -34,6 +34,12 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
+            
+            // Validasi Passing Grade Kategori
+            'passing_grade_twk' => 'nullable|integer|min:0',
+            'passing_grade_tiu' => 'nullable|integer|min:0',
+            'passing_grade_tkp' => 'nullable|integer|min:0',
+            
             'max_attempts' => 'nullable|integer|min:1',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
@@ -44,7 +50,14 @@ class QuestionPackageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $package = QuestionPackage::create($request->all());
+        // [FIX] Ambil semua data request, lalu set default untuk passing grade jika kosong
+        $data = $request->all();
+        $data['passing_grade_twk'] = $request->input('passing_grade_twk', 0);
+        $data['passing_grade_tiu'] = $request->input('passing_grade_tiu', 0);
+        $data['passing_grade_tkp'] = $request->input('passing_grade_tkp', 0);
+
+        // Buat paket dengan SEMUA data
+        $package = QuestionPackage::create($data);
 
         return response()->json([
             'success' => true,
@@ -57,7 +70,6 @@ class QuestionPackageController extends Controller
     {
         $package = QuestionPackage::with(['program', 'questions'])->findOrFail($id);
         
-        // Tambahkan atribut total_questions
         $package->total_questions = $package->questions->count();
 
         return response()->json([
@@ -76,6 +88,11 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
+            
+            'passing_grade_twk' => 'nullable|integer|min:0',
+            'passing_grade_tiu' => 'nullable|integer|min:0',
+            'passing_grade_tkp' => 'nullable|integer|min:0',
+            
             'max_attempts' => 'nullable|integer|min:1',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
@@ -86,7 +103,13 @@ class QuestionPackageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $package->update($request->all());
+        // [FIX] Sama seperti store, ambil semua data lalu merge default
+        $data = $request->all();
+        $data['passing_grade_twk'] = $request->input('passing_grade_twk', 0);
+        $data['passing_grade_tiu'] = $request->input('passing_grade_tiu', 0);
+        $data['passing_grade_tkp'] = $request->input('passing_grade_tkp', 0);
+
+        $package->update($data);
 
         return response()->json([
             'success' => true,

@@ -13,7 +13,7 @@ class StudentTryoutResult extends Model
         'cbt_session_id', 'student_id', 'question_package_id',
         'total_questions', 'answered_questions', 'correct_answers',
         'wrong_answers', 'total_score', 'percentage', 'is_passed',
-        'duration_seconds'
+        'duration_seconds', 'score_twk', 'score_tiu', 'score_tkp', // Tambahkan ini
     ];
 
     protected $casts = [

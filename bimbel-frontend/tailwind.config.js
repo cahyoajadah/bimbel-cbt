@@ -13,6 +13,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        blue: colors.green,   // <--- override!
         border: "hsl(var(--border))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",

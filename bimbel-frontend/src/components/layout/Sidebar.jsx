@@ -2,16 +2,16 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Book, BookCopy, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
-  Clock, TrendingUp, X, Activity, Megaphone, 
-  Image as ImageIcon // [NEW] Import icon untuk konten
+  Clock, TrendingUp, X, Activity, Megaphone, Trophy, // [FIX] Import Trophy Component
+  Image as ImageIcon 
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
-import { useAuthStore } from '../../store/authStore'; // [WAJIB] Import AuthStore agar menu muncul
-import logoImage from '../../assets/logo2.png'; // [WAJIB] Import Logo
+import { useAuthStore } from '../../store/authStore'; 
+import logoImage from '../../assets/logo2.png'; 
 
 const menuItems = {
-  // [PENTING] Key disesuaikan dengan role di database: 'admin_manajemen'
+  // Key role: 'admin_manajemen'
   'admin_manajemen': [
     { path: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/admin/programs-manage', icon: BookCopy, label: 'Program' },
@@ -22,8 +22,6 @@ const menuItems = {
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },
     { path: '/admin/students', icon: Users, label: 'Siswa' },
     { path: '/admin/monitoring', icon: Activity, label: 'Monitoring' },
-    
-    // [NEW] Menu Baru untuk CRUD Blog & Galeri
     { path: '/admin/content-manager', icon: ImageIcon, label: 'Manajemen Konten' },
   ],
   
@@ -40,17 +38,21 @@ const menuItems = {
     { path: '/student/subjects', icon: BookOpen, label: 'Mata Pelajaran' },
     { path: '/student/classes', icon: Video, label: 'Kelas Live' },
     { path: '/student/tryouts', icon: FileText, label: 'Tryout' },
+    
+    // [BARU] Menu Perangkingan (Pastikan icon tidak dipetik '...')
+    { path: '/student/rankings', icon: Trophy, label: 'Perangkingan' },
+
     { path: '/student/schedules', icon: Clock, label: 'Jadwal Bimbel' },
     { path: '/student/progress', icon: TrendingUp, label: 'Progres Belajar' },
     { path: '/student/feedbacks', icon: MessageSquare, label: 'Feedback' },
-    { path: '/student/profile', icon: Users, label: 'Profil' }, // User icon diganti Users agar konsisten import
+    { path: '/student/profile', icon: Users, label: 'Profil' }, 
   ],
 };
 
 export const Sidebar = () => {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar } = useUIStore();
-  const { user } = useAuthStore(); // Ambil user langsung dari store
+  const { user } = useAuthStore(); 
   
   // Tentukan items berdasarkan role user yang sedang login
   const items = (user?.role && menuItems[user.role]) ? menuItems[user.role] : [];
@@ -77,7 +79,6 @@ export const Sidebar = () => {
           {/* Logo Area */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
             <Link to="/" className="flex items-center gap-2">
-                {/* Gambar Logo Menggantikan Teks */}
                 <img 
                     src={logoImage} 
                     alt="Logo" 
@@ -98,7 +99,7 @@ export const Sidebar = () => {
             {items.length > 0 ? (
                 items.map((item) => {
                   const Icon = item.icon;
-                  // Logic active state: exact match atau sub-path
+                  // Logic active state
                   const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
     
                   return (
@@ -119,7 +120,6 @@ export const Sidebar = () => {
                 })
             ) : (
                 <div className="p-4 text-sm text-gray-400 text-center">
-                    {/* Fallback jika role tidak dikenali atau belum login */}
                     Memuat menu...
                 </div>
             )}

@@ -65,6 +65,10 @@ export const API_ENDPOINTS = {
   STUDENT_ANNOUNCEMENTS: '/student/announcements',
   STUDENT_ANNOUNCEMENTS_RECENT: '/student/announcements/recent',
   ANNOUNCEMENT_READ: (id) => `/student/announcements/${id}/read`,
+  STUDENT_RANKING_PACKAGES: '/student/rankings/packages',
+  STUDENT_RANKING_DETAIL: (id) => `/student/rankings/${id}`,
+
+
   
   // CBT
   TRYOUTS: '/student/tryouts',

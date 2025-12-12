@@ -9,7 +9,8 @@ use App\Models\StudentTryoutResult;
 use App\Models\QuestionReport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Str; // [WAJIB] Untuk Str::random
+use Illuminate\Support\Facades\Log; // [WAJIB] Untuk Log::info
 
 class CBTController extends Controller
 {
@@ -24,28 +25,31 @@ class CBTController extends Controller
     }
 
     // [BARU] Helper function untuk menghitung nilai & finalize sesi
-    // Ini dipisahkan agar bisa dipanggil oleh submitTryout DAN fullscreenWarning (Auto Submit)
     private function calculateResult(CbtSession $session)
     {
-        // 1. Ambil semua jawaban
+        // 1. Ambil data
         $answers = $session->answers()->with(['question.answerOptions', 'answerOption'])->get();
-        
+        $package = $session->questionPackage;
+
         $totalScore = 0;
+        $scoreTwk = 0;
+        $scoreTiu = 0;
+        $scoreTkp = 0;
+
         $correctCount = 0;
         $answeredCount = 0;
 
-        // 2. Loop penilaian
+        // 2. Loop Penilaian
         foreach ($answers as $ans) {
             $q = $ans->question;
             $point = 0;
             $isCorrect = false;
 
-            // Cek apakah dijawab
             if ($ans->answer_option_id || $ans->answer_text || !empty($ans->selected_options)) {
                 $answeredCount++;
             }
 
-            // Logika Penilaian Berdasarkan Tipe Soal
+            // --- LOGIKA SKORING ---
             if ($q->type === 'weighted') {
                 if ($ans->answer_option_id) {
                     $selectedOpt = $q->answerOptions->where('id', $ans->answer_option_id)->first();
@@ -57,42 +61,72 @@ class CBTController extends Controller
                 if (!empty($ans->selected_options)) {
                     $correctIds = $q->answerOptions->where('is_correct', true)->pluck('id')->toArray();
                     $studentIds = $ans->selected_options;
-                    
                     $totalCorrectOptions = count($correctIds);
                     $pointPerItem = $totalCorrectOptions > 0 ? ($q->point / $totalCorrectOptions) : 0;
-                    
                     $matches = count(array_intersect($studentIds, $correctIds));
                     $point = $matches * $pointPerItem;
                     if ($point > $q->point) $point = $q->point;
-
                     $isCorrect = ($point == $q->point);
                 }
             } elseif ($q->type === 'short') {
                 if ($ans->answer_text) {
                     $key = $q->answerOptions->where('is_correct', true)->first();
                     if ($key && strtolower(trim($ans->answer_text)) === strtolower(trim($key->option_text))) {
-                        $isCorrect = true;
-                        $point = $q->point;
+                        $isCorrect = true; $point = $q->point;
                     }
                 }
             } else {
-                // Pilihan Ganda Biasa
                 if ($ans->answer_option_id) {
                     $isCorrect = $ans->answerOption && $ans->answerOption->is_correct;
                     if ($isCorrect) $point = $q->point;
                 }
             }
 
-            $ans->update([
-                'is_correct' => $isCorrect,
-                'point_earned' => $point
-            ]);
+            // Update Jawaban
+            $ans->update(['is_correct' => $isCorrect, 'point_earned' => $point]);
+
+            // --- AKUMULASI SKOR KATEGORI ---
+            // Gunakan strtoupper untuk antisipasi "twk" vs "TWK"
+            $cat = $q->category ? strtoupper($q->category) : 'GENERAL';
+
+            if ($cat === 'TWK') {
+                $scoreTwk += $point;
+            } elseif ($cat === 'TIU') {
+                $scoreTiu += $point;
+            } elseif ($cat === 'TKP') {
+                $scoreTkp += $point;
+            }
 
             if ($isCorrect) $correctCount++;
             $totalScore += $point;
         }
 
-        // 3. Simpan Hasil Akhir (StudentTryoutResult)
+        // 3. LOGIKA KELULUSAN
+        // Ambil passing grade dari paket (default 0 jika null)
+        $pgTwk = $package->passing_grade_twk ?? 0;
+        $pgTiu = $package->passing_grade_tiu ?? 0;
+        $pgTkp = $package->passing_grade_tkp ?? 0;
+        $pgTotal = $package->passing_score ?? 0;
+
+        // Cek kelulusan per kategori (Operator >= artinya nilai SAMA DENGAN target tetap lulus)
+        $passTwk = $scoreTwk >= $pgTwk;
+        $passTiu = $scoreTiu >= $pgTiu;
+        $passTkp = $scoreTkp >= $pgTkp;
+        $passTotal = $totalScore >= $pgTotal;
+
+        // Lulus HANYA JIKA semua syarat terpenuhi
+        $isPassed = $passTwk && $passTiu && $passTkp && $passTotal;
+
+        // Debugging: Cek file storage/logs/laravel.log jika masih penasaran kenapa tidak lulus
+        Log::info("DEBUG CBT RESULT [Session: {$session->id}]", [
+            'TWK' => "Skor: $scoreTwk / Target: $pgTwk -> " . ($passTwk ? 'OK' : 'FAIL'),
+            'TIU' => "Skor: $scoreTiu / Target: $pgTiu -> " . ($passTiu ? 'OK' : 'FAIL'),
+            'TKP' => "Skor: $scoreTkp / Target: $pgTkp -> " . ($passTkp ? 'OK' : 'FAIL'),
+            'TOTAL'=> "Skor: $totalScore / Target: $pgTotal -> " . ($passTotal ? 'OK' : 'FAIL'),
+            'FINAL'=> $isPassed ? 'LULUS' : 'TIDAK LULUS'
+        ]);
+
+        // Simpan Hasil
         $result = StudentTryoutResult::create([
             'cbt_session_id' => $session->id,
             'student_id' => $session->student_id,
@@ -102,12 +136,14 @@ class CBTController extends Controller
             'correct_answers' => $correctCount,
             'wrong_answers' => $answeredCount - $correctCount,
             'total_score' => $totalScore,
-            'percentage' => 0, // Bisa dihitung jika perlu
-            'is_passed' => false, // Sesuaikan logic kelulusan jika ada
+            'score_twk' => $scoreTwk,
+            'score_tiu' => $scoreTiu,
+            'score_tkp' => $scoreTkp,
+            'percentage' => 0, 
+            'is_passed' => $isPassed,
             'duration_seconds' => now()->diffInSeconds($session->start_time),
         ]);
 
-        // 4. Update Status Sesi & Cache Nilai Siswa
         $session->update(['end_time' => now(), 'status' => 'completed']);
         $session->student->update(['last_tryout_score' => $totalScore]);
 
@@ -302,7 +338,7 @@ class CBTController extends Controller
         $session = $request->cbt_session;
         DB::beginTransaction();
         try {
-            // [FIX] Menggunakan fungsi shared calculateResult agar logic tidak duplikat
+            // [FIX] Menggunakan fungsi shared calculateResult
             $result = $this->calculateResult($session);
             
             DB::commit();
@@ -319,6 +355,7 @@ class CBTController extends Controller
         $student = $this->getStudentOrAbort($request);
         
         $result = StudentTryoutResult::with([
+            'questionPackage', // Load paket untuk cek passing grade
             'cbtSession.answers.question.answerOptions',
             'cbtSession.answers.answerOption',
             'cbtSession.answers.question.reports' => function($q) use ($student) {
@@ -336,6 +373,7 @@ class CBTController extends Controller
                 'id' => $question->id,
                 'order_number' => $question->order_number,
                 'type' => $question->type,
+                'category' => $question->category, // Kirim kategori ke frontend
                 'point_max' => $question->point,
                 'question_text' => $question->question_text,
                 'question_image' => $question->question_image,
@@ -372,6 +410,27 @@ class CBTController extends Controller
             'success' => true,
             'data' => [
                 'score' => $result->total_score,
+                
+                // Rincian Skor
+                'score_details' => [
+                    'twk' => [
+                        'score' => $result->score_twk,
+                        'passing_grade' => $result->questionPackage->passing_grade_twk ?? 0,
+                        'passed' => $result->score_twk >= ($result->questionPackage->passing_grade_twk ?? 0)
+                    ],
+                    'tiu' => [
+                        'score' => $result->score_tiu,
+                        'passing_grade' => $result->questionPackage->passing_grade_tiu ?? 0,
+                        'passed' => $result->score_tiu >= ($result->questionPackage->passing_grade_tiu ?? 0)
+                    ],
+                    'tkp' => [
+                        'score' => $result->score_tkp,
+                        'passing_grade' => $result->questionPackage->passing_grade_tkp ?? 0,
+                        'passed' => $result->score_tkp >= ($result->questionPackage->passing_grade_tkp ?? 0)
+                    ],
+                ],
+                'is_passed' => $result->is_passed,
+
                 'correct_answers_count' => $result->correct_answers,
                 'total_questions' => $result->total_questions,
                 'duration_taken' => $durationString,
@@ -401,20 +460,16 @@ class CBTController extends Controller
         $session = $request->cbt_session;
         $session->increment('warning_count');
 
-        // Batas toleransi (di sini diset >= 2 sesuai keluhan "2/2 diskualifikasi")
-        // Anda bisa mengubah angka ini menjadi 3 jika ingin 3 kali baru keluar.
-        // Frontend Anda melakukan lockout pada angka >= 2.
+        // Batas toleransi 2x keluar fullscreen
         if ($session->warning_count >= 2) { 
             
             DB::beginTransaction();
             try {
-                // [FIX] Hitung nilai dulu sebelum return response 400
+                // Hitung nilai sebelum return 400
                 $this->calculateResult($session);
                 
                 DB::commit();
                 
-                // Return 400 agar frontend tahu ini pelanggaran, 
-                // tapi data nilai sudah aman tersimpan.
                 return response()->json([
                     'success' => false, 
                     'message' => 'Batas peringatan tercapai. Jawaban dikumpulkan otomatis.', 

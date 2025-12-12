@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'; // [FIX] Tambah useMemo dan useRef
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, ArrowLeft, X, ListPlus, Eye } from 'lucide-react';
@@ -13,7 +13,7 @@ import { useUIStore } from '../../store/uiStore';
 import toast from 'react-hot-toast';
 
 // Import React Quill & Katex
-import ReactQuill, { Quill } from 'react-quill'; // [FIX] Import Quill core
+import ReactQuill from 'react-quill'; 
 import 'react-quill/dist/quill.snow.css'; 
 import 'katex/dist/katex.min.css'; 
 import katex from 'katex';
@@ -28,94 +28,10 @@ export default function Questions() {
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  // [NEW] Ref untuk instance Quill agar bisa manipulasi editor
+  // Ref untuk instance Quill (tidak wajib dipakai langsung jika pakai modules custom)
   const quillRef = useRef(null); 
 
-  // [NEW] Handler Khusus Upload Gambar
-  const imageHandler = () => {
-    const input = document.createElement('input');
-    input.setAttribute('type', 'file');
-    input.setAttribute('accept', 'image/*');
-    input.click();
-
-    input.onchange = async () => {
-      const file = input.files[0];
-      if (file) {
-        const formData = new FormData();
-        formData.append('image', file);
-
-        const loadingToast = toast.loading('Mengupload gambar...');
-        
-        try {
-          // Kirim ke API Laravel
-          const res = await api.post('/upload-image', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          });
-          
-          const imageUrl = res.data.url;
-          
-          // Cari editor yang sedang aktif (agak tricky di loop, tapi untuk single editor utama bisa pakai ref)
-          // Karena kita pakai banyak editor (soal & opsi), kita manfaatkan sifat ReactQuill
-          // Quill akan menyisipkan gambar di posisi kursor terakhir yang aktif
-          
-          // Fallback: Kita gunakan instance quill dari context global jika memungkinkan, 
-          // atau simple alert jika user klik tombol tapi fokus hilang.
-          // Namun cara terbaik di react-quill loop adalah membiarkan default behavior ATAU
-          // kita perlu ref terpisah untuk setiap editor (sangat kompleks).
-          
-          // [SOLUSI PRAKTIS]: 
-          // Custom handler ini bekerja paling baik jika terikat pada editor spesifik.
-          // Untuk menyederhanakan, kita akan attach handler ini ke modules CONFIGURATION.
-          // Dan Quill otomatis tahu editor mana yang memanggilnya.
-          
-          // Dapatkan instance quill yang memanggil fungsi ini (this keyword di handler quill)
-          // Sayangnya di React function component, 'this' berbeda.
-          // Jadi kita perlu trik: 
-          
-          // Kita akan menembak langsung ke instance editor yang sedang fokus jika bisa,
-          // tapi karena ReactQuill membungkusnya, kita kembalikan URL ke user untuk dicopy? Tidak UX friendly.
-          
-          // [FIX IMPLEMENTASI]:
-          // Kita manipulasi DOM selection range terakhir.
-          
-          // Insert image ke editor
-          // Catatan: Ini akan memasukkan gambar ke editor yang sedang memiliki "Selection"
-          // Jika fokus hilang, mungkin gagal. Tapi input file dialog biasanya aman.
-          
-          /* KARENA KITA PUNYA BANYAK EDITOR (SOAL & OPSI A-E)
-             Kita tidak bisa pakai satu 'quillRef'. 
-             Solusinya: Konfigurasi modules dipassing ke masing-masing ReactQuill,
-             dan di dalam useMemo kita definisikan handlernya.
-             
-             Trik: Di dalam ReactQuill, handler image menerima (value).
-          */
-          
-          // Kita perlu akses ke instance quill. 
-          // Sayangnya react-quill agak sulit mengekspos instance di dalam custom handler tanpa ref spesifik.
-          // Namun, kita bisa menggunakan document.querySelector('.ql-editor:focus') atau sejenisnya
-          // atau membiarkan selection range bekerja.
-          
-        } catch (error) {
-          console.error(error);
-          toast.error('Gagal upload gambar');
-        } finally {
-            toast.dismiss(loadingToast);
-        }
-      }
-    };
-  };
-
-  /* [NEW] Logic Upload Gambar yang Benar untuk React Quill 
-     Kita harus membungkus konfigurasi modules dalam useMemo agar handler dibuat sekali saja
-     dan kita butuh closure khusus untuk menangani "insert ke editor mana".
-     
-     TAPI: Karena kita merender banyak editor (soal + opsi), ref satu-satu itu ribet.
-     Cara paling stabil: Biarkan Quill menangani UI, tapi saat tombol image diklik,
-     kita override behavior defaultnya.
-  */
-
-  // Fungsi utilitas untuk membuat handler upload yang terikat pada instance quill tertentu
-  // Kita akan passing ini nanti via props 'modules'
+  // Konfigurasi Modules Quill dengan Handler Upload Gambar Custom
   const getModules = (isSimple = false) => ({
     toolbar: {
         container: isSimple 
@@ -129,7 +45,6 @@ export default function Questions() {
                 ['clean']
               ],
         handlers: {
-            // Override handler gambar default (base64) menjadi upload server
             image: function() {
                 const input = document.createElement('input');
                 input.setAttribute('type', 'file');
@@ -149,9 +64,6 @@ export default function Questions() {
                             });
                             
                             const url = res.data.url;
-                            
-                            // 'this' mengacu pada instance Quill toolbar wrapper
-                            // this.quill adalah instance editor yang sebenarnya
                             const range = this.quill.getSelection();
                             this.quill.insertEmbed(range.index, 'image', url);
                             
@@ -168,7 +80,6 @@ export default function Questions() {
     }
   });
 
-  // [NEW] Gunakan useMemo agar konfigurasi tidak dire-create setiap render (penting untuk performa & fokus)
   const mainModules = useMemo(() => getModules(false), []);
   const simpleModules = useMemo(() => getModules(true), []);
 
@@ -178,6 +89,7 @@ export default function Questions() {
     'link', 'image', 'formula'
   ];
 
+  // Fetch Package Info
   const { data: packageData } = useQuery({
     queryKey: ['question-package', packageId],
     queryFn: async () => {
@@ -186,6 +98,7 @@ export default function Questions() {
     },
   });
 
+  // Fetch Questions
   const { data: questionsData, isLoading } = useQuery({
     queryKey: ['questions', packageId],
     queryFn: async () => {
@@ -196,11 +109,13 @@ export default function Questions() {
 
   const questions = Array.isArray(questionsData?.questions) ? questionsData.questions : (Array.isArray(questionsData) ? questionsData : []);
 
+  // Form Handling
   const { 
     register, control, handleSubmit, reset, watch, setValue, formState: { errors } 
   } = useForm({
     defaultValues: {
       type: 'single',
+      category: 'General', // [BARU] Default kategori
       question_text: '',
       duration_seconds: 60,
       point: 5,
@@ -299,8 +214,7 @@ export default function Questions() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const res = await api.delete(API_ENDPOINTS.QUESTION_DETAIL(packageId, id));
-      return res.data;
+      await api.delete(API_ENDPOINTS.QUESTION_DETAIL(packageId, id));
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['questions', packageId]);
@@ -339,6 +253,7 @@ export default function Questions() {
 
       reset({
         type: question.type || 'single',
+        category: question.category || 'General', // [BARU] Load kategori saat edit
         question_text: question.question_text || '',
         duration_seconds: question.duration_seconds,
         point: question.point,
@@ -350,6 +265,7 @@ export default function Questions() {
       setEditingQuestion(null);
       reset({
         type: 'single',
+        category: 'General', // [BARU] Default kategori baru
         question_text: '',
         duration_seconds: 60,
         point: 5,
@@ -425,6 +341,15 @@ export default function Questions() {
         return <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium">{types[row.type] || row.type}</span>;
       }
     },
+    // [BARU] Kolom Kategori di Tabel
+    {
+      header: 'Kategori',
+      render: (row) => (
+        <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-bold border border-blue-100">
+            {row.category || 'Umum'}
+        </span>
+      )
+    },
     { 
       header: 'Pertanyaan', 
       render: (row) => (
@@ -483,6 +408,12 @@ export default function Questions() {
       <Modal isOpen={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} title="Preview Soal" size="lg">
         {editingQuestion && (
            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">
+                      {editingQuestion.category || 'Umum'}
+                  </span>
+                  <span className="text-xs text-gray-500">Poin: {editingQuestion.point}</span>
+              </div>
               <div className="p-4 bg-gray-50 rounded border prose max-w-none ql-editor" dangerouslySetInnerHTML={{ __html: editingQuestion.question_text }} />
               <div className="grid gap-2">
                  {(editingQuestion.answer_options || editingQuestion.options || []).map((opt, idx) => (
@@ -506,32 +437,50 @@ export default function Questions() {
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
+            {/* [BARU] Dropdown Kategori Soal menggunakan React Hook Form */}
+            <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                <select 
+                    className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
+                    {...register('category', { required: true })}
+                >
+                    <option value="General">Umum</option>
+                    <option value="TWK">TWK</option>
+                    <option value="TIU">TIU</option>
+                    <option value="TKP">TKP</option>
+                </select>
+            </div>
+
+            <div className="md:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Soal</label>
                 <select 
                     className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
                     {...register('type')}
                 >
-                    <option value="single">Pilihan Ganda (Standar)</option>
-                    <option value="multiple">Pilihan Ganda Kompleks</option>
-                    <option value="weighted">Bobot Nilai (TKD/CPNS)</option>
+                    <option value="single">Pilihan Ganda</option>
+                    <option value="multiple">Kompleks</option>
+                    <option value="weighted">Bobot (TKD)</option>
                     <option value="short">Isian Singkat</option>
                 </select>
             </div>
-            <Input 
-                label="Poin Maksimal" 
-                type="number" 
-                {...register('point', { valueAsNumber: true })} 
-            />
-            <Input 
-                label="Durasi (detik)" 
-                type="number" 
-                {...register('duration_seconds', { valueAsNumber: true })} 
-            />
+            <div className="md:col-span-1">
+                <Input 
+                    label="Poin" 
+                    type="number" 
+                    {...register('point', { valueAsNumber: true })} 
+                />
+            </div>
+            <div className="md:col-span-1">
+                <Input 
+                    label="Durasi (s)" 
+                    type="number" 
+                    {...register('duration_seconds', { valueAsNumber: true })} 
+                />
+            </div>
           </div>
 
-          {/* Editor Pertanyaan dengan CUSTOM MODULES */}
+          {/* Editor Pertanyaan */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Teks Pertanyaan</label>
             <div className="h-64 mb-8"> 
@@ -544,7 +493,6 @@ export default function Questions() {
                             theme="snow"
                             value={field.value || ''} 
                             onChange={field.onChange}
-                            // [FIX] Gunakan mainModules dengan handler upload
                             modules={mainModules}
                             formats={formats}
                             className="h-56"
@@ -614,7 +562,7 @@ export default function Questions() {
                             </div>
 
                             <div className="flex-1 space-y-2">
-                                {/* Editor Opsi Jawaban dengan CUSTOM MODULES */}
+                                {/* Editor Opsi Jawaban */}
                                 <div className="bg-white">
                                     <Controller
                                         name={`options.${index}.text`}
@@ -625,7 +573,6 @@ export default function Questions() {
                                                 theme="snow"
                                                 value={field.value || ''}
                                                 onChange={field.onChange}
-                                                // [FIX] Gunakan simpleModules dengan handler upload
                                                 modules={simpleModules}
                                                 className="h-auto"
                                                 placeholder={`Teks opsi ${String.fromCharCode(65 + index)}`}
@@ -662,7 +609,7 @@ export default function Questions() {
             )}
           </div>
 
-          {/* Editor Pembahasan dengan CUSTOM MODULES */}
+          {/* Editor Pembahasan */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Pembahasan / Penjelasan</label>
             <div className="h-48 mb-8">
@@ -674,7 +621,6 @@ export default function Questions() {
                             theme="snow"
                             value={field.value || ''}
                             onChange={field.onChange}
-                            // [FIX] Gunakan mainModules dengan handler upload
                             modules={mainModules}
                             formats={formats}
                             className="h-40"

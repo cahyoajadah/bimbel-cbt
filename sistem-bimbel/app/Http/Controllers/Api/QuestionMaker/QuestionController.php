@@ -37,6 +37,7 @@ class QuestionController extends Controller
 
         $validator = Validator::make($request->all(), [
             'type' => 'required|in:single,multiple,weighted,short',
+            'category' => 'required|in:TWK,TIU,TKP,General',
             'question_text' => 'required|string',
             'point' => 'required|numeric|min:0',
             'duration_seconds' => 'nullable|integer|min:0',
@@ -55,6 +56,9 @@ class QuestionController extends Controller
 
             $question = $package->questions()->create([
                 'type' => $request->type,
+                // [BARU] Simpan Kategori
+                'category' => $request->category,
+
                 'question_text' => $request->question_text,
                 'point' => $request->point,
                 'duration_seconds' => $request->duration_seconds ?? 60,

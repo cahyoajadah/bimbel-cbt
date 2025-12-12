@@ -13,12 +13,14 @@ class Question extends Model
 {  
     protected $fillable = [
         'question_package_id',
+        'category',
         'question_text',
         'question_image', // Pastikan kolom ini ada di migration jika digunakan
         'order_number',
         'type',         
         'explanation',  
         'point'
+        //'duration_seconds' // Jika diperlukan
     ];
 
     protected $casts = ['point' => 'decimal:2'];

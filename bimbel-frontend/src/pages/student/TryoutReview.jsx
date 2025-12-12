@@ -9,7 +9,7 @@ import { Modal } from '../../components/common/Modal';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
-// [FIX] Import CSS untuk styling konten HTML (Rumus & Text Editor)
+// Import CSS untuk styling konten HTML (Rumus & Text Editor)
 import 'katex/dist/katex.min.css'; 
 import 'react-quill/dist/quill.snow.css'; 
 
@@ -66,7 +66,6 @@ export default function TryoutReview() {
   const renderAnswerReview = (q) => {
     if (q.type === 'short') {
         const myAns = q.answer_text || "-";
-        // Kunci jawaban isian singkat biasanya plain text, tapi kita ambil aman
         const keyAns = q.options.find(o => o.is_correct)?.text || "-";
         const isCorrect = parseFloat(q.point_earned) === parseFloat(q.point_max);
 
@@ -145,7 +144,6 @@ export default function TryoutReview() {
                                 </div>
                             )}
                         </div>
-                        {/* [FIX] Render Opsi Jawaban HTML */}
                         <div className="flex-1 text-sm text-gray-900 font-medium min-w-0">
                             <div 
                                 className="ql-editor !p-0 prose max-w-none"
@@ -177,9 +175,15 @@ export default function TryoutReview() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-center justify-center">
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex flex-col items-center justify-center text-center">
                 <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Total Skor</span>
                 <span className="text-3xl font-black text-blue-700 mt-1">{score}</span>
+                {/* [FIX] Tampilkan Status Kelulusan Total */}
+                {reviewData.is_passed ? (
+                     <span className="mt-2 px-3 py-1 bg-green-200 text-green-800 text-[10px] font-extrabold rounded-full tracking-wide">LULUS UJIAN</span>
+                ) : (
+                     <span className="mt-2 px-3 py-1 bg-red-200 text-red-800 text-[10px] font-extrabold rounded-full tracking-wide">TIDAK LULUS</span>
+                )}
             </div>
             <div className="bg-green-50 p-4 rounded-xl border border-green-100 flex flex-col items-center justify-center">
                 <span className="text-xs font-bold text-green-600 uppercase tracking-wider">Benar Sempurna</span>
@@ -196,6 +200,34 @@ export default function TryoutReview() {
                 </div>
             </div>
           </div>
+
+          {/* [FIX] Breakdown Kategori Skor */}
+          {reviewData?.score_details && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 border-t border-gray-100 pt-6">
+                {['twk', 'tiu', 'tkp'].map((type) => {
+                    const details = reviewData.score_details[type];
+                    if (!details) return null;
+                    const labels = { twk: 'TWK', tiu: 'TIU', tkp: 'TKP' };
+                    
+                    return (
+                        <div key={type} className={clsx("p-4 rounded-xl border-2 flex flex-col items-center justify-center", 
+                            details.passed ? "border-green-100 bg-green-50" : "border-red-100 bg-red-50"
+                        )}>
+                            <span className="text-gray-600 font-bold uppercase text-sm mb-1">{labels[type]}</span>
+                            <span className={clsx("text-2xl font-extrabold", details.passed ? "text-green-700" : "text-red-700")}>
+                                {details.score}
+                            </span>
+                            <span className="text-xs text-gray-400 mt-1">Target Min: {details.passing_grade}</span>
+                            {details.passed ? 
+                                <span className="mt-2 px-2 py-0.5 bg-green-200 text-green-800 text-[10px] font-bold rounded-full">LULUS</span> :
+                                <span className="mt-2 px-2 py-0.5 bg-red-200 text-red-800 text-[10px] font-bold rounded-full">GAGAL</span>
+                            }
+                        </div>
+                    );
+                })}
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -245,9 +277,13 @@ export default function TryoutReview() {
                     <div className={`px-6 py-3 border-b flex justify-between items-center ${headerClass}`}>
                         <div className="flex items-center gap-3">
                             <span className="bg-white/80 px-2 py-0.5 rounded border border-black/5 text-sm font-bold">No. {idx + 1}</span>
-                            <span className="text-xs uppercase tracking-wide opacity-80 font-semibold">
-                                {q.type === 'multiple' ? 'Pilihan Ganda Kompleks' : q.type === 'weighted' ? 'Bobot Nilai' : q.type === 'short' ? 'Isian' : 'Pilihan Ganda'}
-                            </span>
+                            <div className="flex flex-col">
+                                <span className="text-xs uppercase tracking-wide opacity-80 font-semibold">
+                                    {q.type === 'multiple' ? 'Pilihan Ganda Kompleks' : q.type === 'weighted' ? 'Bobot Nilai' : q.type === 'short' ? 'Isian' : 'Pilihan Ganda'}
+                                </span>
+                                {/* [FIX] Tampilkan Kategori Soal */}
+                                {q.category && <span className="text-[10px] font-bold opacity-70 uppercase">{q.category}</span>}
+                            </div>
                         </div>
                         <div className="flex items-center gap-3">
                              <div className="flex items-center gap-2 text-sm font-bold mr-4">
@@ -258,14 +294,13 @@ export default function TryoutReview() {
                              <button 
                                 onClick={() => handleOpenReportModal(q.id)}
                                 className="text-gray-400 hover:text-red-600 transition-colors flex items-center gap-1 text-xs font-medium bg-white/50 px-2 py-1 rounded border border-transparent hover:border-red-200 hover:bg-red-50"
-                            >
+                             >
                                 <Flag size={14} /> Lapor
                              </button>
                         </div>
                     </div>
 
                     <div className="p-6">
-                        {/* [FIX] Render Soal HTML */}
                         <div className="prose max-w-none text-gray-800 text-lg mb-6 ql-editor">
                             <div dangerouslySetInnerHTML={{ __html: q.question_text }} />
                             {q.question_image && <img src={q.question_image} className="mt-4 rounded-lg border max-h-96" alt="Soal" />}
@@ -297,7 +332,6 @@ export default function TryoutReview() {
                             </div>
                         )}
 
-                        {/* [FIX] Render Pembahasan HTML */}
                         <div className="mt-8 pt-6 border-t border-gray-100">
                             <div className="bg-indigo-50/80 rounded-xl p-5 border border-indigo-100">
                                 <h4 className="text-indigo-900 font-bold flex items-center gap-2 mb-2">
@@ -322,36 +356,36 @@ export default function TryoutReview() {
 
       {/* Modal Laporan */}
       <Modal 
-         isOpen={isReportModalOpen} 
-         onClose={handleCloseReportModal} 
-         title="Laporkan Masalah Soal"
-         size="md"
+          isOpen={isReportModalOpen} 
+          onClose={handleCloseReportModal} 
+          title="Laporkan Masalah Soal"
+          size="md"
       >
-         <div className="space-y-4">
-             <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm flex items-start gap-2">
-                 <MessageSquare size={18} className="mt-0.5 shrink-0" />
-                 <p>Laporan Anda akan dikirim ke pembuat soal. Gunakan fitur ini jika ada kesalahan kunci jawaban, typo, atau gambar error.</p>
-             </div>
+          <div className="space-y-4">
+              <div className="bg-yellow-50 text-yellow-800 p-3 rounded-lg text-sm flex items-start gap-2">
+                  <MessageSquare size={18} className="mt-0.5 shrink-0" />
+                  <p>Laporan Anda akan dikirim ke pembuat soal. Gunakan fitur ini jika ada kesalahan kunci jawaban, typo, atau gambar error.</p>
+              </div>
 
-             <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi Masalah</label>
-                 <textarea 
+              <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi Masalah</label>
+                  <textarea 
                     className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="4"
                     placeholder="Contoh: Kunci jawaban seharusnya A..."
                     value={reportContent}
                     onChange={(e) => setReportContent(e.target.value)}
-                 ></textarea>
-             </div>
+                  ></textarea>
+              </div>
 
-             <div className="flex justify-end gap-2 pt-2">
-                 <Button variant="outline" onClick={handleCloseReportModal}>Batal</Button>
-                 <Button onClick={submitReport} loading={reportMutation.isPending} variant="danger">Kirim Laporan</Button>
-             </div>
-         </div>
+              <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={handleCloseReportModal}>Batal</Button>
+                  <Button onClick={submitReport} loading={reportMutation.isPending} variant="danger">Kirim Laporan</Button>
+              </div>
+          </div>
       </Modal>
 
-      {/* Global CSS untuk Image Responsive & Style Editor */}
+      {/* Global CSS */}
       <style>{`
         .ql-editor img {
             max-width: 100%;
@@ -363,14 +397,12 @@ export default function TryoutReview() {
         .ql-editor p {
             margin-bottom: 0.5em;
         }
-        /* Hapus padding editor agar sejajar di list opsi */
         .ql-editor {
             height: auto !important;
         }
         .ql-editor.p-0 {
             padding: 0 !important;
         }
-        /* Hapus margin atas paragraf pertama agar sejajar bullet point */
         .ql-editor p:first-child {
             margin-top: 0;
         }
