@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\QuestionMaker;
 
 use App\Http\Controllers\Controller;
 use App\Models\QuestionPackage;
-use App\Models\QuestionCategory; // Pastikan model ini sudah di-import
+use App\Models\QuestionCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -18,6 +18,7 @@ class QuestionPackageController extends Controller
             $query->where('name', 'like', '%' . $request->search . '%');
         }
 
+        // Urutkan created_at desc agar paket terbaru muncul di atas
         $packages = $query->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 15));
 
@@ -34,18 +35,28 @@ class QuestionPackageController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
-            'passing_score' => 'required|integer|min:0', // Passing grade global (akumulasi)
-            'max_attempts' => 'nullable|integer|min:1',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'passing_score' => 'required|integer|min:0',
+            // [FIX] Izinkan 0 (unlimited)
+            'max_attempts' => 'nullable|integer|min:0', 
+            // [FIX] Validasi Tanggal yang ketat
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after:start_date',
             'is_active' => 'boolean',
+        ], [
+            'end_date.after' => 'Waktu selesai harus setelah waktu mulai.',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $package = QuestionPackage::create($request->all());
+        // [FIX] Konversi max_attempts 0 menjadi NULL (Unlimited)
+        $data = $request->all();
+        if (isset($data['max_attempts']) && $data['max_attempts'] == 0) {
+            $data['max_attempts'] = null;
+        }
+
+        $package = QuestionPackage::create($data);
 
         return response()->json([
             'success' => true,
@@ -56,11 +67,9 @@ class QuestionPackageController extends Controller
 
     public function show($id)
     {
-        // [UPDATE] Kita tambahkan 'categories' di sini agar muncul di respon
         $package = QuestionPackage::with(['program', 'questions', 'categories'])
             ->findOrFail($id);
         
-        // Tambahkan atribut total_questions
         $package->total_questions = $package->questions->count();
 
         return response()->json([
@@ -79,17 +88,25 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
-            'max_attempts' => 'nullable|integer|min:1',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'max_attempts' => 'nullable|integer|min:0',
+            // [FIX] Validasi Tanggal Konsisten
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after:start_date',
             'is_active' => 'boolean',
+        ], [
+            'end_date.after' => 'Waktu selesai harus setelah waktu mulai.',
         ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $package->update($request->all());
+        $data = $request->all();
+        if (isset($data['max_attempts']) && $data['max_attempts'] == 0) {
+            $data['max_attempts'] = null;
+        }
+
+        $package->update($data);
 
         return response()->json([
             'success' => true,
@@ -110,7 +127,7 @@ class QuestionPackageController extends Controller
     }
 
     // =========================================================================
-    // FITUR BARU: MANAJEMEN KATEGORI (TIU, TWK, TKP, dll)
+    // FITUR KATEGORI (TIU, TWK, TKP)
     // =========================================================================
 
     public function addCategory(Request $request, $packageId)
@@ -167,11 +184,10 @@ class QuestionPackageController extends Controller
             ->where('id', $categoryId)
             ->firstOrFail();
 
-        // Cek apakah ada soal yang menggunakan kategori ini
         if ($category->questions()->exists()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal hapus. Masih ada soal di kategori ini. Pindahkan atau hapus soal terlebih dahulu.'
+                'message' => 'Gagal hapus. Kategori ini masih memiliki soal.'
             ], 400);
         }
 

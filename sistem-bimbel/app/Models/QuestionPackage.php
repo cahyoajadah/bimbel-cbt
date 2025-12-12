@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-// [PENTING] Nama class harus QuestionPackage, bukan Question
 class QuestionPackage extends Model
 {
     use HasFactory;
@@ -19,30 +18,26 @@ class QuestionPackage extends Model
         'duration_minutes',
         'passing_score',
         'max_attempts',
-        'start_date',
-        'end_date',
-        'is_active',
+        'start_date', // [BARU] Wajib ada
+        'end_date',   // [BARU] Wajib ada
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'start_date' => 'datetime',
-        'end_date' => 'datetime',
+        'start_date' => 'datetime', // Casting ke format tanggal
+        'end_date' => 'datetime',   // Casting ke format tanggal
     ];
 
-    // Relasi ke Program
     public function program(): BelongsTo
     {
         return $this->belongsTo(Program::class);
     }
 
-    // Relasi ke Soal
     public function questions(): HasMany
     {
         return $this->hasMany(Question::class);
     }
 
-    // Relasi ke Kategori
     public function categories(): HasMany
     {
         return $this->hasMany(QuestionCategory::class);

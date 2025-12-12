@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
-  Package, AlertCircle, List, Search, ArrowRight, FolderPlus, MessageSquareWarning 
+  Package, AlertCircle, Search, ArrowRight, FolderPlus, MessageSquareWarning 
 } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
@@ -9,25 +9,74 @@ import { API_ENDPOINTS } from '../../api/endpoints';
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  // Fetch Dashboard Stats
+  // Fetch Dashboard Stats (Real Data)
   const { data: stats, isLoading } = useQuery({
     queryKey: ['qm-dashboard-stats'],
     queryFn: async () => {
       try {
-        const res = await api.get(API_ENDPOINTS.QUESTION_PACKAGES); 
-        const packages = res.data.data || [];
+        // 1. Ambil Data Paket
+        const packagesRes = await api.get(API_ENDPOINTS.QUESTION_PACKAGES);
+        
+        // [FIX] Handle Pagination Data Structure
+        // Jika backend menggunakan paginate(), array data ada di .data.data
+        // Jika backend menggunakan get(), array data ada di .data
+        const rawData = packagesRes.data.data; 
+        const packages = Array.isArray(rawData) ? rawData : (rawData?.data || []);
+
+        // [FIX] Hitung Paket Aktif (Berdasarkan Tanggal Hari Ini)
+        // Bukan lagi berdasarkan flag 'is_active'
+        const now = new Date();
+        const activePackagesCount = packages.filter(p => {
+            if (!p.start_date || !p.end_date) return false;
+            const start = new Date(p.start_date);
+            const end = new Date(p.end_date);
+            return now >= start && now <= end;
+        }).length;
+
+        // 2. Ambil Data Laporan (Pending)
+        let pendingReportsCount = 0;
+        try {
+            const reportsRes = await api.get('/question-maker/reports?status=pending');
+            
+            // Handle pagination laporan
+            const reportsRaw = reportsRes.data.data;
+            const reports = Array.isArray(reportsRaw) ? reportsRaw : (reportsRaw?.data || []);
+            
+            // Gunakan total dari pagination jika ada, atau hitung panjang array
+            pendingReportsCount = reportsRes.data.data.total ?? reports.length;
+        } catch (e) {
+            console.warn("Gagal ambil laporan:", e);
+        }
+
         return {
           total_packages: packages.length,
-          active_packages: packages.filter(p => p.is_active).length,
-          // Simulasi data laporan (nanti bisa diganti endpoint real jika sudah ada)
-          pending_reports: 0, 
-          recent_packages: packages.slice(0, 5)
+          active_packages: activePackagesCount,
+          pending_reports: pendingReportsCount,
+          recent_packages: packages.slice(0, 5) // Ambil 5 paket terbaru
         };
       } catch (err) {
+        console.error("Dashboard Error:", err);
         return { total_packages: 0, active_packages: 0, pending_reports: 0, recent_packages: [] };
       }
     },
   });
+
+  // Helper cek status aktif untuk tabel (Sama seperti di halaman Packages)
+  const getPackageStatus = (pkg) => {
+      if (!pkg.start_date || !pkg.end_date) return { label: 'Draft', color: 'bg-gray-100 text-gray-600' };
+      
+      const now = new Date();
+      const start = new Date(pkg.start_date);
+      const end = new Date(pkg.end_date);
+      
+      if (now >= start && now <= end) {
+          return { label: 'Tayang', color: 'bg-green-100 text-green-700' };
+      } else if (now < start) {
+          return { label: 'Terjadwal', color: 'bg-yellow-100 text-yellow-700' };
+      } else {
+          return { label: 'Selesai', color: 'bg-gray-100 text-gray-500' };
+      }
+  };
 
   const StatCard = ({ title, value, icon: Icon, color, subtext }) => (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-start justify-between hover:shadow-md transition-shadow">
@@ -72,7 +121,7 @@ export default function Dashboard() {
           value={stats?.total_packages || 0} 
           icon={Package} 
           color={{ bg: 'bg-blue-100', text: 'text-blue-600' }}
-          subtext={`${stats?.active_packages || 0} Paket Aktif`}
+          subtext={`${stats?.active_packages || 0} Paket Sedang Tayang`}
         />
         <StatCard 
           title="Laporan Masalah" 
@@ -83,31 +132,26 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* QUICK ACTIONS SECTION (Analisis Dihapus) */}
+      {/* QUICK ACTIONS SECTION */}
       <div>
         <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
             <Search size={20} className="text-blue-600" />
             Aksi Cepat
         </h3>
-        {/* Mengubah grid menjadi max 3 kolom agar layout seimbang */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* [FIX] Menghapus 'Kelola Soal' karena redundan dengan 'Buat/Kelola Paket'.
+            Sekarang hanya ada 2 tombol utama yang berbeda tujuannya.
+        */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <QuickAction 
-                title="Buat Paket Baru" 
-                desc="Mulai buat paket soal tryout baru"
+                title="Kelola Paket Soal" 
+                desc="Buat baru atau edit paket soal tryout"
                 icon={FolderPlus}
                 color="bg-blue-600"
-                onClick={() => navigate('/question-maker/packages?action=create')}
-            />
-            <QuickAction 
-                title="Kelola Soal" 
-                desc="Lihat dan edit daftar paket soal"
-                icon={List}
-                color="bg-indigo-600"
                 onClick={() => navigate('/question-maker/packages')}
             />
             <QuickAction 
-                title="Cek Laporan" 
-                desc="Tinjau masukan dari siswa"
+                title="Cek Laporan Siswa" 
+                desc="Tinjau masukan dan kesalahan soal"
                 icon={MessageSquareWarning}
                 color="bg-orange-500"
                 onClick={() => navigate('/question-maker/reports')}
@@ -134,24 +178,27 @@ export default function Dashboard() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                     {stats?.recent_packages?.length > 0 ? (
-                        stats.recent_packages.map((pkg) => (
-                            <tr key={pkg.id} className="hover:bg-gray-50/50 transition-colors">
-                                <td className="px-6 py-3 font-medium text-gray-900">{pkg.name}</td>
-                                <td className="px-6 py-3">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold ${pkg.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                                        {pkg.is_active ? 'Aktif' : 'Draft'}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-3 text-right">
-                                    <button 
-                                        onClick={() => navigate(`/question-maker/packages/${pkg.id}/questions`)}
-                                        className="text-blue-600 hover:text-blue-800 font-medium text-xs border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-                                    >
-                                        Kelola Soal
-                                    </button>
-                                </td>
-                            </tr>
-                        ))
+                        stats.recent_packages.map((pkg) => {
+                            const status = getPackageStatus(pkg);
+                            return (
+                                <tr key={pkg.id} className="hover:bg-gray-50/50 transition-colors">
+                                    <td className="px-6 py-3 font-medium text-gray-900">{pkg.name}</td>
+                                    <td className="px-6 py-3">
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${status.color}`}>
+                                            {status.label}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-3 text-right">
+                                        <button 
+                                            onClick={() => navigate(`/question-maker/packages/${pkg.id}/questions`)}
+                                            className="text-blue-600 hover:text-blue-800 font-medium text-xs border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                                        >
+                                            Kelola Soal
+                                        </button>
+                                    </td>
+                                </tr>
+                            );
+                        })
                     ) : (
                         <tr>
                             <td colSpan="3" className="px-6 py-8 text-center text-gray-400">Belum ada paket soal.</td>

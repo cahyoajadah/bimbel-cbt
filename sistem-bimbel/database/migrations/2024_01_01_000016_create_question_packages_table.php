@@ -16,8 +16,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->integer('duration_minutes')->default(120); // Durasi pengerjaan
             $table->integer('passing_score')->default(0);
+            $table->integer('max_attempts')->nullable()->comment('0 atau null = unlimited');
             
-            // [BARU] Durasi Tanggal Aktif
             $table->date('start_date')->nullable(); 
             $table->date('end_date')->nullable();
             

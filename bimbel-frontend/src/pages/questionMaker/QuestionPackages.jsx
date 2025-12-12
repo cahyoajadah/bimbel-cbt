@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, List, Layers, X } from 'lucide-react'; // Icon Layers untuk kategori
+import { Plus, Edit, Trash2, List, Layers, X, Calendar, Clock, AlertCircle } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
@@ -11,6 +11,24 @@ import { useForm } from 'react-hook-form';
 import { useUIStore } from '../../store/uiStore';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+
+// [HELPER] Format tanggal untuk input datetime-local
+const formatDateTimeLocal = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const offset = date.getTimezoneOffset();
+  const adjustedDate = new Date(date.getTime() - (offset * 60 * 1000));
+  return adjustedDate.toISOString().slice(0, 16);
+};
+
+// [HELPER] Format tampilan tanggal
+const formatDateDisplay = (isoString) => {
+  if (!isoString) return '-';
+  return new Date(isoString).toLocaleString('id-ID', {
+    day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+};
 
 export default function QuestionPackages() {
   const navigate = useNavigate();
@@ -30,10 +48,11 @@ export default function QuestionPackages() {
     queryKey: ['question-packages'],
     queryFn: async () => {
       const res = await api.get(API_ENDPOINTS.QUESTION_PACKAGES);
-      return res.data.data;
+      return res.data.data; // Mengambil object pagination
     },
   });
 
+  // Handle data pagination dari Laravel
   const packages = packagesData?.data || []; 
 
   const { data: programs } = useQuery({
@@ -68,6 +87,7 @@ export default function QuestionPackages() {
       reset();
       toast.success('Paket soal berhasil diperbarui');
     },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal update paket'),
   });
 
   const deleteMutation = useMutation({
@@ -87,17 +107,17 @@ export default function QuestionPackages() {
       setValue('description', pkg.description);
       setValue('duration_minutes', pkg.duration_minutes);
       setValue('passing_score', pkg.passing_score);
-      setValue('max_attempts', pkg.max_attempts);
-      setValue('start_date', pkg.start_date ? pkg.start_date.split('T')[0] : '');
-      setValue('end_date', pkg.end_date ? pkg.end_date.split('T')[0] : '');
-      setValue('is_active', pkg.is_active);
+      setValue('max_attempts', pkg.max_attempts || 0);
+      
+      // [FIX] Set tanggal ke input datetime-local
+      setValue('start_date', formatDateTimeLocal(pkg.start_date));
+      setValue('end_date', formatDateTimeLocal(pkg.end_date));
     } else {
       setEditingPackage(null);
       reset({ 
-          is_active: true, 
-          duration_minutes: 120, 
-          passing_score: 0, // Default 0 karena passing grade dipindah ke kategori (opsional)
-          max_attempts: '',
+          duration_minutes: 100, 
+          passing_score: 0, 
+          max_attempts: 0,
           start_date: '',
           end_date: ''
       });
@@ -116,11 +136,14 @@ export default function QuestionPackages() {
   };
 
   const onSubmit = (data) => {
-    const payload = { ...data };
-    if (!payload.start_date) payload.start_date = null;
-    if (!payload.end_date) payload.end_date = null;
-    if (!payload.max_attempts || payload.max_attempts == 0) payload.max_attempts = null;
+    // Validasi Tanggal
+    if (new Date(data.end_date) <= new Date(data.start_date)) {
+        return toast.error("Waktu selesai harus setelah waktu mulai.");
+    }
 
+    const payload = { ...data };
+    // Normalisasi max_attempts (0 => null handled by backend logic or send 0)
+    
     if (editingPackage) {
       updateMutation.mutate({ id: editingPackage.id, data: payload });
     } else {
@@ -128,7 +151,7 @@ export default function QuestionPackages() {
     }
   };
 
-  // --- MANAJEMEN KATEGORI ---
+  // --- MANAJEMEN KATEGORI (Desain Lama Dipertahankan) ---
   const handleManageCategories = (pkg) => {
     setSelectedPackage(pkg);
     setIsCategoryModalOpen(true);
@@ -138,7 +161,6 @@ export default function QuestionPackages() {
     const { register: regCat, handleSubmit: submitCat, reset: resetCat } = useForm();
     const queryClient = useQueryClient();
 
-    // Fetch detail paket (termasuk categories) terbaru
     const { data: pkgDetail, isLoading: isLoadingCat } = useQuery({
         queryKey: ['question-package-detail', pkg.id],
         queryFn: async () => {
@@ -172,7 +194,6 @@ export default function QuestionPackages() {
 
     return (
         <div className="space-y-6">
-            {/* Form Tambah Kategori */}
             <form onSubmit={submitCat(onAddCategory)} className="flex gap-3 items-end bg-gray-50 p-4 rounded-lg border">
                 <div className="flex-1">
                     <Input label="Nama Kategori" placeholder="Contoh: TIU" {...regCat('name', { required: true })} className="bg-white" />
@@ -183,7 +204,6 @@ export default function QuestionPackages() {
                 <Button type="submit" loading={addCategoryMutation.isPending} icon={Plus}>Tambah</Button>
             </form>
 
-            {/* List Kategori */}
             <div>
                 <h3 className="font-bold text-gray-700 mb-2">Daftar Kategori</h3>
                 {isLoadingCat ? <p>Loading...</p> : (
@@ -201,9 +221,7 @@ export default function QuestionPackages() {
                                     variant="ghost" 
                                     className="text-red-500 hover:bg-red-50"
                                     onClick={() => {
-                                        if(confirm('Hapus kategori ini? Soal di dalamnya mungkin akan hilang/error.')) {
-                                            deleteCategoryMutation.mutate(cat.id);
-                                        }
+                                        if(confirm('Hapus kategori ini?')) deleteCategoryMutation.mutate(cat.id);
                                     }}
                                 >
                                     <Trash2 size={16} />
@@ -238,28 +256,37 @@ export default function QuestionPackages() {
         </span>
       )
     },
+    // [FIX] Kolom Status diganti dengan Periode Aktif yang lebih informatif
     { 
-      header: 'Status', 
-      render: (row) => (
-        <span className={`px-2 py-1 text-xs rounded-full ${row.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-          {row.is_active ? 'Aktif' : 'Nonaktif'}
-        </span>
-      )
+      header: 'Periode Aktif', 
+      render: (row) => {
+        const now = new Date();
+        const start = new Date(row.start_date);
+        const end = new Date(row.end_date);
+        const isActive = now >= start && now <= end;
+
+        return (
+            <div className="text-xs space-y-1">
+                <div className={`font-bold ${isActive ? 'text-green-600' : 'text-gray-500'}`}>
+                    {isActive ? '● Sedang Tayang' : '○ Tidak Tayang'}
+                </div>
+                <div className="text-gray-500 text-[10px]">
+                    {formatDateDisplay(row.start_date)} - {formatDateDisplay(row.end_date)}
+                </div>
+            </div>
+        );
+      }
     },
     {
       header: 'Aksi',
       render: (row) => (
         <div className="flex space-x-1">
-          {/* Tombol Kelola Soal */}
           <Button size="sm" variant="outline" icon={List} onClick={() => navigate(`/question-maker/packages/${row.id}/questions`)} title="Kelola Soal">
             Soal
           </Button>
-          
-          {/* Tombol Kelola Kategori */}
           <Button size="sm" variant="outline" icon={Layers} onClick={() => handleManageCategories(row)} title="Kelola Kategori">
             Kategori
           </Button>
-
           <Button size="sm" variant="ghost" icon={Edit} onClick={() => handleOpenModal(row)} />
           <Button size="sm" variant="ghost" icon={Trash2} onClick={() => handleDelete(row)} className="text-red-600 hover:bg-red-50" />
         </div>
@@ -275,7 +302,7 @@ export default function QuestionPackages() {
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <Table columns={columns} data={packages} loading={isLoading} />
+        <Table columns={columns} data={packages} loading={isLoading} emptyMessage="Belum ada paket soal." />
       </div>
 
       {/* MODAL BUAT/EDIT PAKET */}
@@ -290,7 +317,7 @@ export default function QuestionPackages() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Program</label>
             <select 
-                className="w-full border-gray-300 rounded-lg shadow-sm p-2 border" 
+                className="w-full border-gray-300 rounded-lg shadow-sm p-2 border focus:ring-blue-500 focus:border-blue-500" 
                 {...register('program_id', { required: 'Program wajib dipilih' })}
             >
                 <option value="">-- Pilih Program --</option>
@@ -300,16 +327,37 @@ export default function QuestionPackages() {
 
           <div className="grid grid-cols-2 gap-4">
             <Input type="number" label="Durasi Total (Menit)" {...register('duration_minutes', { required: true, min: 1 })} />
-            <Input type="number" label="Passing Score Global" placeholder="Opsional" {...register('passing_score')} />
+            <Input type="number" label="Passing Score Global" placeholder="0" {...register('passing_score', { required: true, min: 0 })} />
+          </div>
+
+          {/* [FIX] INPUT TANGGAL (Gantikan Checkbox Aktif) */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-3">
+              <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2">
+                  <Calendar size={16} /> Jadwal Masa Aktif
+              </h4>
+              <div className="grid grid-cols-1 gap-3">
+                  <Input 
+                    label="Waktu Mulai" 
+                    type="datetime-local" 
+                    {...register('start_date', { required: 'Wajib diisi' })} 
+                    className="bg-white"
+                  />
+                  <Input 
+                    label="Waktu Selesai" 
+                    type="datetime-local" 
+                    {...register('end_date', { required: 'Wajib diisi' })} 
+                    className="bg-white"
+                  />
+              </div>
+              <div className="flex items-start gap-2 text-blue-600 text-xs bg-blue-100/50 p-2 rounded">
+                  <AlertCircle size={14} className="mt-0.5 shrink-0"/>
+                  <p>Paket soal hanya akan muncul di akun siswa jika waktu saat ini berada di antara waktu mulai dan selesai.</p>
+              </div>
           </div>
 
           <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-100">
             <Input type="number" label="Batas Pengerjaan (Kali)" placeholder="0 = Unlimited" {...register('max_attempts')} className="bg-white" />
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <input type="checkbox" id="isActive" {...register('is_active')} className="rounded text-blue-600" />
-            <label htmlFor="isActive" className="text-sm text-gray-700">Paket Aktif</label>
+            <p className="text-xs text-gray-500 mt-1 ml-1">Isi <strong>0</strong> untuk pengerjaan tak terbatas.</p>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4 border-t">
