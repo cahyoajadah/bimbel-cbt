@@ -43,6 +43,7 @@ import Progress from '../pages/student/Progress';
 import Profile from '../pages/student/Profile';
 import StudentFeedbacks from '../pages/student/Feedbacks';
 import StudentAnnouncements from '../pages/student/Announcements';
+import Ranking from '../pages/student/Ranking';
 
 import DashboardLayout from '../components/layout/DashboardLayout';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -137,6 +138,7 @@ function AppRoutes() {
                     <Route path="feedbacks" element={<StudentFeedbacks />} />
                     <Route path="profile" element={<Profile />} />
                     <Route path="announcements" element={<StudentAnnouncements />} />
+                    <Route path="ranking/:packageId" element={<Ranking />} />
                     <Route path="*" element={<Navigate to="/student/dashboard" replace />} />
                   </Routes>
                 </DashboardLayout>

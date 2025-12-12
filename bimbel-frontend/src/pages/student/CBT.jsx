@@ -1,12 +1,12 @@
 // src/pages/student/CBT.jsx
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query'; // Hapus useQuery
+import { useMutation } from '@tanstack/react-query';
 import { useCBTStore } from '../../store/cbtStore';
 import { 
   Clock, AlertTriangle, CheckSquare, Square, Circle, CheckCircle2, 
-  AlertOctagon, ChevronLeft, ChevronRight, Grid, RefreshCw, WifiOff,
-  Maximize, PlayCircle, Minimize
+  ChevronLeft, ChevronRight, Grid, RefreshCw, WifiOff,
+  Maximize, PlayCircle, Minimize, AlertOctagon
 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner'; 
@@ -30,11 +30,12 @@ export default function CBT() {
   const [textAnswer, setTextAnswer] = useState(''); 
   const [isExiting, setIsExiting] = useState(false);
   const [sessionToken, setSessionToken] = useState(localStorage.getItem('cbt_token'));
-  const [isLoadingInit, setIsLoadingInit] = useState(true); // Loading manual
+  const [isLoadingInit, setIsLoadingInit] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isResumedSession, setIsResumedSession] = useState(false);
 
   const violationCountRef = useRef(0); 
-  const initRef = useRef(false); // Ref untuk mencegah double init
+  const initRef = useRef(false);
 
   // --- ZUSTAND STORE ---
   const {
@@ -57,15 +58,20 @@ export default function CBT() {
     initSession
   } = useCBTStore();
 
+  // [FIX 1] PINDAHKAN LOGIKA VARIABEL KE ATAS SINI
+  // Agar bisa diakses oleh fungsi handlePreSubmitCheck
+  const currentQuestion = questions[currentQuestionIndex] || {};
+  const progress = getProgress();
+  const unansweredCount = questions.length - progress.answered;
+
   // --- 1. CORE INITIALIZATION ---
   useEffect(() => {
-    // Mencegah init berjalan dua kali atau berulang
     if (initRef.current) return;
 
     const initializeCBT = async () => {
         try {
             setIsLoadingInit(true);
-            initRef.current = true; // Tandai sedang init
+            initRef.current = true;
 
             if (!packageId) throw new Error("ID Paket tidak valid");
 
@@ -77,7 +83,7 @@ export default function CBT() {
             setSessionToken(token);
             localStorage.setItem('cbt_token', token);
 
-            // B. Fetch Questions (Langsung, tanpa useQuery)
+            // B. Fetch Questions
             const questionsRes = await studentService.getTryoutQuestions(token);
             const questionsData = questionsRes.data;
 
@@ -88,10 +94,8 @@ export default function CBT() {
             const endTime = new Date(startTime.getTime() + durationMs);
             const remainingSeconds = Math.max(0, Math.floor((endTime - now) / 1000));
 
-            // D. Masukkan ke Store (Sekali jalan)
+            // D. Masukkan ke Store
             initSession(sessionData, questionsData);
-            
-            // Override timer store
             useCBTStore.setState({ timeRemaining: remainingSeconds });
 
             // E. Restore Jawaban Lokal
@@ -109,17 +113,17 @@ export default function CBT() {
                 }
             }
 
-            // F. Auto Start jika Resume
+            // F. Handle Resume
             if (sessionData.is_resumed) {
-                toast.success('Melanjutkan sesi ujian...');
-                setHasStarted(true); 
+                setIsResumedSession(true);
+                // [FIX 2] JANGAN setHasStarted(true) disini.
+                // Biarkan user klik tombol "Lanjutkan" agar Fullscreen bisa jalan.
             }
 
         } catch (error) {
             console.error("Gagal inisialisasi:", error);
-            initRef.current = false; // Reset jika gagal agar bisa retry
+            initRef.current = false;
             const msg = error.response?.data?.message || "Gagal memuat ujian";
-            
             if (error.response?.status === 409 || error.response?.status === 403) {
                 toast.error(msg);
                 navigate('/student/tryouts');
@@ -133,10 +137,7 @@ export default function CBT() {
 
     initializeCBT();
     
-    // Cleanup saat unmount
-    return () => {
-        stopTimer();
-    };
+    return () => stopTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packageId]); 
 
@@ -157,15 +158,13 @@ export default function CBT() {
     onSuccess: () => {
         setTimeout(() => setAutoSaving(false), 500); 
     },
-    onError: () => {
-      setAutoSaving(false);
-    },
+    onError: () => setAutoSaving(false),
   });
 
   const fullscreenWarningMutation = useMutation({
     mutationFn: async () => {
        if (!sessionToken) return;
-       await studentService.fullscreenWarning(sessionToken); // [FIX] Panggil endpoint warning yang benar
+       await studentService.fullscreenWarning(sessionToken); 
     },
   });
 
@@ -188,7 +187,7 @@ export default function CBT() {
       toast.success('Ujian selesai!');
       navigate(`/student/tryout-review/${resultId}`);
     },
-    onError: (err) => {
+    onError: () => {
       setSubmitting(false);
       setIsExiting(false);
       toast.error("Gagal submit. Periksa koneksi internet Anda.");
@@ -231,7 +230,7 @@ export default function CBT() {
     return () => clearTimeout(timer);
   }, [textAnswer, currentQuestionIndex, questions, answers, handleAnswerChange]);
 
-  // Sync Text Input when changing questions
+  // Sync Text Input
   useEffect(() => {
     if (questions && questions.length > 0) {
         const currentQ = questions[currentQuestionIndex];
@@ -243,6 +242,7 @@ export default function CBT() {
 
   // --- START EXAM LOGIC ---
   const handleStartExam = async () => {
+    // 1. Request Fullscreen (Wajib interaksi user)
     if (screenfull.isEnabled) {
         try {
             await screenfull.request();
@@ -250,9 +250,11 @@ export default function CBT() {
             setIsFullscreen(true);
         } catch (err) {
             console.error("Fullscreen blocked:", err);
-            toast.error("Gagal masuk mode layar penuh. Pastikan browser mengizinkan.");
+            toast.error("Gagal masuk mode layar penuh.");
         }
     }
+    
+    // 2. Mulai Timer dan UI
     setHasStarted(true);
     startTimer(() => {
         setIsExiting(true);
@@ -261,12 +263,20 @@ export default function CBT() {
     });
   };
 
-  const toggleFullscreen = () => {
+  const handleToggleFullscreen = () => {
     if (screenfull.isEnabled) {
-        screenfull.toggle().then(() => {
-            setIsFullscreen(screenfull.isFullscreen);
-            setFullscreen(screenfull.isFullscreen);
-        });
+        if (screenfull.isFullscreen) {
+            if (window.confirm("Keluar dari mode layar penuh akan dicatat sebagai pelanggaran. Yakin?")) {
+                screenfull.exit();
+            }
+        } else {
+            screenfull.request().then(() => {
+                setIsFullscreen(true);
+                setFullscreen(true);
+            });
+        }
+    } else {
+        toast.error("Browser tidak mendukung layar penuh.");
     }
   };
 
@@ -300,8 +310,8 @@ export default function CBT() {
     const handleFullscreenChange = () => {
       if (screenfull.isEnabled) {
         const isNowFullscreen = screenfull.isFullscreen;
-        setFullscreen(isNowFullscreen);
         setIsFullscreen(isNowFullscreen);
+        setFullscreen(isNowFullscreen);
 
         if (!isNowFullscreen && !isExiting) {
           handleViolation();
@@ -336,8 +346,7 @@ export default function CBT() {
       screenfull.request().then(() => {
           setShowSecurityModal(false);
           setIsFullscreen(true);
-      })
-      .catch(() => {
+      }).catch(() => {
          setShowSecurityModal(false);
          toast("Silakan tekan F11 jika layar tidak penuh.");
       });
@@ -378,25 +387,30 @@ export default function CBT() {
                   <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto text-blue-600 shadow-inner">
                       <PlayCircle size={40} />
                   </div>
+                  
                   <div>
-                      <h1 className="text-2xl font-bold text-gray-900">Siap Mengerjakan?</h1>
+                      <h1 className="text-2xl font-bold text-gray-900">
+                          {isResumedSession ? "Lanjutkan Ujian" : "Siap Mengerjakan?"}
+                      </h1>
                       <p className="text-gray-500 mt-2 text-sm leading-relaxed">
                           Ujian akan masuk ke mode layar penuh. <br/>
                           Jangan keluar dari layar penuh atau berpindah tab selama ujian berlangsung.
                       </p>
                   </div>
+
                   <div className="bg-yellow-50 text-yellow-800 text-sm p-4 rounded-xl text-left flex gap-3 border border-yellow-100">
                       <AlertTriangle className="shrink-0 mt-0.5" size={18} />
                       <div>
                           <span className="font-bold">Peringatan:</span> Pelanggaran akan dicatat dan dapat menyebabkan diskualifikasi.
                       </div>
                   </div>
+
                   <button 
                       onClick={handleStartExam}
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl text-lg transition-all shadow-lg shadow-blue-200 flex items-center justify-center gap-2 transform active:scale-95"
                   >
                       <Maximize size={20} />
-                      Mulai Ujian Sekarang
+                      {isResumedSession ? "Lanjutkan Sekarang" : "Mulai Ujian Sekarang"}
                   </button>
               </div>
           </div>
@@ -404,10 +418,6 @@ export default function CBT() {
   }
 
   // --- MAIN EXAM UI ---
-  const currentQuestion = questions[currentQuestionIndex];
-  const progress = getProgress();
-  const unansweredCount = questions.length - progress.answered;
-
   return (
     <div className="min-h-screen bg-gray-50 select-none flex flex-col font-sans" onCopy={(e)=>e.preventDefault()}>
       {/* HEADER */}
@@ -421,8 +431,9 @@ export default function CBT() {
                 </span>
             </div>
             <button 
-                onClick={toggleFullscreen}
-                className="p-2 text-gray-500 hover:bg-gray-100 rounded-full hidden sm:block transition-colors"
+                onClick={handleToggleFullscreen}
+                className={`p-2 rounded-full hidden sm:block transition-colors ${isFullscreen ? 'text-blue-600 bg-blue-50 hover:bg-blue-100' : 'text-gray-500 hover:bg-gray-100'}`}
+                title={isFullscreen ? "Keluar Fullscreen" : "Masuk Fullscreen"}
             >
                 {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
             </button>
@@ -449,7 +460,7 @@ export default function CBT() {
         </div>
       </div>
 
-      {/* CONTENT */}
+      {/* CONTENT GRID */}
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* KIRI: SOAL */}
         <div className="lg:col-span-3 flex flex-col h-full">
@@ -483,7 +494,6 @@ export default function CBT() {
                   )}
                </div>
 
-               {/* Opsi Jawaban */}
                {(() => {
                    const currentAns = answers[currentQuestion.id];
                    
@@ -645,7 +655,7 @@ export default function CBT() {
         </div>
       </div>
 
-      {/* MODALS (Security & Submit) */}
+      {/* MODALS */}
       {showSecurityModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl text-center border-t-4 border-yellow-500 animate-in fade-in zoom-in-95 duration-200">

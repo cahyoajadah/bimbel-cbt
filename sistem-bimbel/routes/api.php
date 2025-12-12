@@ -1,6 +1,6 @@
 <?php
 // ============================================
-// routes/api.php
+// routes/api.php (FINAL FIX)
 // ============================================
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\UploadController;
@@ -23,8 +23,11 @@ use App\Http\Controllers\Api\Student\ClassController;
 use App\Http\Controllers\Api\Student\CBTController;
 use App\Http\Controllers\Api\Student\AnnouncementController as StudentAnnouncement;
 use App\Http\Controllers\Api\Public\LandingController;
-// [FIX 1] Import Controller Ranking & Middleware CBT
-use App\Http\Controllers\Api\Common\RankingController; 
+
+// [FIX] Pastikan Import RankingController Benar (Dari Public)
+use App\Http\Controllers\Api\Public\RankingController; 
+
+// [FIX] Import Middleware
 use App\Http\Middleware\CBTSessionMiddleware; 
 
 // PUBLIC ROUTES
@@ -86,12 +89,12 @@ Route::middleware(['auth:sanctum', 'role:pembuat_soal'])
     ->group(function () {
         Route::apiResource('packages', QuestionPackageController::class);
         
-        // Routes Kategori
+        // Kategori
         Route::post('packages/{packageId}/categories', [QuestionPackageController::class, 'addCategory']);
         Route::put('packages/{packageId}/categories/{categoryId}', [QuestionPackageController::class, 'updateCategory']);
         Route::delete('packages/{packageId}/categories/{categoryId}', [QuestionPackageController::class, 'deleteCategory']);
 
-        // Routes Soal
+        // Soal
         Route::get('packages/{packageId}/questions', [QuestionController::class, 'index']);
         Route::post('packages/{packageId}/questions', [QuestionController::class, 'store']);
         Route::get('packages/{packageId}/questions/{id}', [QuestionController::class, 'show']);
@@ -115,31 +118,30 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
         Route::get('classes/upcoming', [ClassController::class, 'upcoming']);
         Route::post('classes/{id}/join', [ClassController::class, 'join']);
         Route::get('schedules', [ClassController::class, 'schedules']);
-        Route::get('progress', [StudentDashboardController::class, 'progress']);
+        Route::get('progress', [StudentDashboardController::class, 'progress']); // Halaman Progress (List Nilai)
         Route::get('announcements', [StudentAnnouncement::class, 'index']);
         Route::get('announcements/recent', [StudentAnnouncement::class, 'recent']);
         Route::post('announcements/{id}/read', [StudentAnnouncement::class, 'markAsRead']);
         Route::get('feedbacks', [StudentDashboardController::class, 'feedbacks']);
         
-        // CBT Menu Utama
+        // CBT
         Route::get('tryouts', [CBTController::class, 'availableTryouts']);
         Route::post('tryouts/{packageId}/start', [CBTController::class, 'startSession']);
         Route::get('tryout-results/{resultId}', [CBTController::class, 'reviewResult']);
         Route::post('questions/report', [CBTController::class, 'reportQuestion']);
 
-        // [FIX 2] Nested CBT Routes (Agar URL sesuai dengan frontend /api/student/cbt/...)
+        // Nested CBT Routes (Session)
         Route::middleware([CBTSessionMiddleware::class])
             ->prefix('cbt')
             ->group(function () {
                 Route::get('questions', [CBTController::class, 'getQuestions']);
-                // Frontend pakai 'save-answer', samakan di sini
                 Route::post('save-answer', [CBTController::class, 'saveAnswer']); 
                 Route::post('submit', [CBTController::class, 'submitTryout']);
                 Route::post('fullscreen-warning', [CBTController::class, 'fullscreenWarning']);
             });
     });
 
-// COMMON ROUTES
+// COMMON ROUTES (Ranking, dll)
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('programs', function () {
         return response()->json(['success' => true, 'data' => \App\Models\Program::where('is_active', true)->get()]);
@@ -149,6 +151,6 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::post('/upload-image', [UploadController::class, 'uploadImage']);
     
-    // Route Ranking
+    // [FIX] Route Ranking yang benar
     Route::get('/ranking/{packageId}', [RankingController::class, 'getPackageRanking']);
 });

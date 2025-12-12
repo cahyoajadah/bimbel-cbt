@@ -1,17 +1,21 @@
 <?php
-// ============================================
-// app/Models/QuestionReport.php
-// ============================================
+
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class QuestionReport extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
-        'question_id', 'student_id', 'report_content',
-        'status', 'admin_response'
+        'question_id',
+        'student_id',
+        'report_content',
+        'status', // pending, resolved, rejected
+        'admin_response'
     ];
 
     public function question(): BelongsTo

@@ -1,7 +1,5 @@
 <?php
-// ============================================
-// app/Http/Controllers/Api/QuestionMaker/QuestionReportController.php
-// ============================================
+
 namespace App\Http\Controllers\Api\QuestionMaker;
 
 use App\Http\Controllers\Controller;
@@ -12,14 +10,20 @@ class QuestionReportController extends Controller
 {
     public function index(Request $request)
     {
-        $query = QuestionReport::with(['question.questionPackage', 'student.user']);
+        $status = $request->query('status');
 
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+        // [FIX] Perbaikan nama relasi
+        // Gunakan 'question.package' sesuai nama fungsi di Model Question
+        $query = QuestionReport::with([
+            'student.user',     
+            'question.package'  // <--- UBAH DARI 'question.questionPackage' JADI 'question.package'
+        ]);
+
+        if ($status) {
+            $query->where('status', $status);
         }
 
-        $reports = $query->orderBy('created_at', 'desc')
-            ->paginate($request->get('per_page', 15));
+        $reports = $query->orderBy('created_at', 'desc')->paginate(10);
 
         return response()->json([
             'success' => true,
@@ -29,22 +33,18 @@ class QuestionReportController extends Controller
 
     public function respond(Request $request, $id)
     {
-        $report = QuestionReport::findOrFail($id);
-
         $request->validate([
-            'admin_response' => 'required|string',
-            'status' => 'required|in:reviewed,resolved',
+            'status' => 'required|in:resolved,rejected',
+            'response' => 'nullable|string'
         ]);
 
+        $report = QuestionReport::findOrFail($id);
+        
         $report->update([
-            'admin_response' => $request->admin_response,
             'status' => $request->status,
+            'admin_response' => $request->response
         ]);
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Respon berhasil disimpan',
-            'data' => $report
-        ]);
+        return response()->json(['success' => true, 'message' => 'Laporan diperbarui']);
     }
 }

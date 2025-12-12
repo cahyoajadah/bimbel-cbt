@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+// [PENTING] Nama class harus QuestionPackage, bukan Question
 class QuestionPackage extends Model
 {
     use HasFactory;
@@ -29,29 +30,21 @@ class QuestionPackage extends Model
         'end_date' => 'datetime',
     ];
 
+    // Relasi ke Program
     public function program(): BelongsTo
     {
         return $this->belongsTo(Program::class);
     }
 
+    // Relasi ke Soal
     public function questions(): HasMany
     {
         return $this->hasMany(Question::class);
     }
 
-    // [PENTING] Tambahkan method ini agar error 500 hilang
+    // Relasi ke Kategori
     public function categories(): HasMany
     {
         return $this->hasMany(QuestionCategory::class);
-    }
-
-    // Helper function
-    public function isAvailable()
-    {
-        $now = now();
-        if (!$this->start_date && !$this->end_date) return true;
-        $start = $this->start_date ? $this->start_date : $now->copy()->subDay();
-        $end = $this->end_date ? $this->end_date : $now->copy()->addYears(100);
-        return $now->between($start, $end);
     }
 }

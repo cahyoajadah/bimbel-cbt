@@ -16,12 +16,10 @@ export const API_ENDPOINTS = {
   FEATURES: '/public/features',
   FAQ: '/public/faq',
   
-  
   // [NEW] Endpoint Publik
   PUBLIC_BLOG: '/public/blog',
   PUBLIC_GALLERY: '/public/gallery',
   PUBLIC_CONTENT_DETAIL: (id) => `/public/blog/${id}`, // Pastikan route ini ada di Laravel
-
 
   // Admin
   ADMIN_DASHBOARD: '/admin/dashboard',
@@ -41,12 +39,10 @@ export const API_ENDPOINTS = {
   // [NEW] Endpoint CRUD Admin (Satu endpoint resource untuk semua konten)
   ADMIN_CONTENTS: '/admin/landing-contents',
 
-
   // Question Maker
   QUESTION_PACKAGES: '/question-maker/packages',
   QUESTIONS: (packageId) => `/question-maker/packages/${packageId}/questions`,
-  QUESTION_DETAIL: (packageId, questionId) => 
-    `/question-maker/packages/${packageId}/questions/${questionId}`,
+  QUESTION_DETAIL: (packageId, questionId) => `/question-maker/packages/${packageId}/questions/${questionId}`,
   QUESTION_REPORTS: '/question-maker/reports',
   REPORT_RESPOND: (id) => `/question-maker/reports/${id}/respond`,
 

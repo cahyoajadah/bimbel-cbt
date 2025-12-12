@@ -357,6 +357,14 @@ class CBTController extends Controller
             // Final Result: Harus lulus global DAN semua kategori
             $finalPassStatus = $globalPassed && $allCategoriesPassed;
 
+            // [FIX] Hitung durasi real, tapi jangan biarkan melebihi batas waktu paket
+            $realDuration = now()->diffInSeconds($session->start_time);
+            $maxDuration = $session->questionPackage->duration_minutes * 60;
+            
+            // Ambil yang lebih kecil: Durasi Asli atau Batas Maksimal Paket
+            // Ini mencegah durasi "23 jam" jika siswa submit telat banget
+            $finalDuration = min($realDuration, $maxDuration);
+
             $result = StudentTryoutResult::create([
                 'cbt_session_id' => $session->id,
                 'student_id' => $session->student_id,
@@ -368,7 +376,7 @@ class CBTController extends Controller
                 'total_score' => $totalScore,
                 'percentage' => 0, 
                 'is_passed' => $finalPassStatus,
-                'duration_seconds' => now()->diffInSeconds($session->start_time),
+                'duration_seconds' => $finalDuration, // [FIX] Gunakan durasi yang sudah dilimit
                 'category_scores' => json_encode($formattedCategoryScores),
             ]);
 

@@ -7,21 +7,29 @@ use Illuminate\Support\Facades\Schema;
 // ============================================
 return new class extends Migration
 {
-    public function up(): void
+    // database/migrations/xxxx_xx_xx_xxxxxx_create_student_tryout_results_table.php
+
+    public function up()
     {
         Schema::create('student_tryout_results', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('cbt_session_id')->constrained('cbt_sessions')->onDelete('cascade');
-            $table->foreignId('student_id')->constrained('students')->onDelete('cascade');
-            $table->foreignId('question_package_id')->constrained('question_packages')->onDelete('cascade');
+            $table->foreignId('cbt_session_id')->constrained()->onDelete('cascade');
+            $table->foreignId('student_id')->constrained()->onDelete('cascade');
+            $table->foreignId('question_package_id')->constrained()->onDelete('cascade');
+            
             $table->integer('total_questions');
             $table->integer('answered_questions');
             $table->integer('correct_answers');
             $table->integer('wrong_answers');
+            
             $table->decimal('total_score', 8, 2);
             $table->decimal('percentage', 5, 2);
             $table->boolean('is_passed')->default(false);
-            $table->integer('duration_seconds');
+            $table->integer('duration_seconds')->nullable(); // Untuk durasi pengerjaan
+            
+            // [PENTING] Kolom ini wajib ada untuk fitur detail nilai
+            $table->json('category_scores')->nullable(); 
+            
             $table->timestamps();
         });
     }
