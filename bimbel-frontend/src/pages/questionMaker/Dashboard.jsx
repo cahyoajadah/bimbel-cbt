@@ -14,16 +14,16 @@ export default function Dashboard() {
     queryKey: ['qm-dashboard-stats'],
     queryFn: async () => {
       try {
-        const res = await api.get(API_ENDPOINTS.QUESTION_PACKAGES); 
-        const packages = res.data.data || [];
+        const res = await api.get(API_ENDPOINTS.QM_DASHBOARD); 
+        const dataBackend = res.data.data || [];
         return {
-          total_packages: packages.length,
-          active_packages: packages.filter(p => p.is_active).length,
-          // Simulasi data laporan (nanti bisa diganti endpoint real jika sudah ada)
-          pending_reports: 0, 
-          recent_packages: packages.slice(0, 5)
+          total_packages: dataBackend.stats.total_packages,
+          active_packages: dataBackend.stats.active_packages,
+          pending_reports: dataBackend.stats.pending_reports, 
+          recent_packages: dataBackend.stats.recent_packages
         };
       } catch (err) {
+        console.error("Gagal memuat dashboard:", err);
         return { total_packages: 0, active_packages: 0, pending_reports: 0, recent_packages: [] };
       }
     },

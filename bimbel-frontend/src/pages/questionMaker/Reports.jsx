@@ -91,11 +91,17 @@ export default function QuestionReports() {
     },
     { 
         header: 'Soal Terkait', 
-        render: (row) => (
-            <div className="max-w-xs truncate text-sm text-gray-600" title={row.question?.question_text}>
-                {row.question?.question_text || 'Soal dihapus'}
-            </div>
-        )
+        render: (row) => {
+            const rawText = row.question?.question_text || '';
+            // Regex untuk menghapus semua tag HTML (<p>, <br>, <b>, dll)
+            const cleanText = rawText.replace(/<[^>]+>/g, '');
+            
+            return (
+                <div className="max-w-xs truncate text-sm text-gray-600" title={cleanText}>
+                    {cleanText || 'Soal dihapus'}
+                </div>
+            );
+        }
     },
     { 
         header: 'Isi Laporan', 
@@ -148,7 +154,10 @@ export default function QuestionReports() {
              <div className="space-y-6">
                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Soal yang Dilaporkan</h4>
-                     <p className="text-gray-800 whitespace-pre-wrap mb-4">{selectedReport.question?.question_text}</p>
+                    <div 
+                        className="text-gray-800 mb-4 prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: selectedReport.question?.question_text }}
+                    />
                      {selectedReport.question?.question_image && (
                          <img src={selectedReport.question.question_image} className="max-h-48 rounded border" alt="Soal" />
                      )}
