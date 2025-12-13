@@ -1,10 +1,10 @@
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import html2pdf from 'html2pdf.js'; // [UBAH] Gunakan html2pdf
+import html2pdf from 'html2pdf.js';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
-import { CheckCircle, XCircle, ArrowLeft, Clock, Award, CheckSquare, Square, AlertTriangle, Info, Flag, MessageSquare, Download } from 'lucide-react'; // [UBAH] Icon Download
+import { CheckCircle, XCircle, ArrowLeft, Clock, Award, CheckSquare, Square, AlertTriangle, Info, Flag, Download } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 import clsx from 'clsx';
@@ -22,26 +22,24 @@ export default function TryoutReview() {
   const [selectedQuestionId, setSelectedQuestionId] = useState(null);
   const [reportContent, setReportContent] = useState('');
   
-  // [BARU] State loading untuk proses download
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // [BARU] Fungsi Direct Download PDF
+  // Fungsi Direct Download PDF
   const handleDownloadPDF = () => {
       setIsDownloading(true);
       const element = componentRef.current;
       
       const opt = {
-        margin:       [10, 10, 10, 10], // Margin (mm)
+        margin:       [10, 10, 10, 10], 
         filename:     `Pembahasan-Tryout-${resultId}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { 
-            scale: 2, // Resolusi tinggi agar teks/rumus tajam
-            useCORS: true, // Izinkan gambar cross-origin
-            // [PENTING] Sembunyikan elemen yang punya class 'print:hidden'
+            scale: 2, 
+            useCORS: true, 
             ignoreElements: (node) => node.classList && node.classList.contains('print:hidden')
         },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } // Mencegah soal terpotong
+        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } 
       };
 
       html2pdf().set(opt).from(element).save().then(() => {
@@ -127,7 +125,7 @@ export default function TryoutReview() {
         );
     }
 
-    // 2. PILIHAN GANDA
+    // 2. PILIHAN GANDA (REGULAR & KOMPLEKS)
     return (
         <div className="space-y-3 mt-4">
             {q.options.map((opt) => {
@@ -208,7 +206,6 @@ export default function TryoutReview() {
               <ArrowLeft className="w-5 h-5 mr-2" /> Kembali ke Dashboard
             </Button>
             <div className="flex items-center gap-2">
-                {/* [UBAH] Tombol Download */}
                 <Button 
                     variant="outline" 
                     onClick={handleDownloadPDF} 
@@ -231,7 +228,6 @@ export default function TryoutReview() {
           </div>
 
           <div className="max-w-5xl mx-auto px-4 py-4 print:px-8">
-            {/* JUDUL HALAMAN (Hidden di PDF jika print:hidden bekerja, tapi di html2canvas kita handle via ignoreElements atau CSS) */}
             <h1 className="text-xl font-bold text-gray-900 mb-6 print:hidden">Review Hasil Ujian</h1>
 
             {/* SCORE CARD */}
@@ -285,6 +281,18 @@ export default function TryoutReview() {
                 const earned = parseFloat(q.point_earned || 0);
                 const max = parseFloat(q.point_max || q.point || 0);
                 
+                // [FIX] Cek Jawaban Absolut untuk Soal Tipe 'multiple'
+                // Logika: Jika user memilih semua jawaban benar DAN tidak ada jawaban salah yang dipilih
+                const isStrictlyCorrect = (() => {
+                    if (q.type === 'multiple') {
+                        const correctIds = q.options.filter(o => o.is_correct).map(o => o.id);
+                        const studentIds = q.student_selected_options || [];
+                        // Panjang harus sama (berarti tidak ada jawaban extra) DAN semua jawaban benar ada
+                        return correctIds.length === studentIds.length && correctIds.every(id => studentIds.includes(id));
+                    }
+                    return false;
+                })();
+
                 let headerClass = "";
                 let statusText = "";
                 let statusIcon = null;
@@ -294,7 +302,8 @@ export default function TryoutReview() {
                     statusText = `Poin: ${formatScore(earned)}`;
                     statusIcon = <Award size={16} />;
                 } else if (q.type === 'multiple') {
-                    if (earned >= max && max > 0) {
+                    // [FIX] Tambahkan kondisi 'OR isStrictlyCorrect' untuk memaksa status Benar Sempurna
+                    if ((earned >= max && max > 0) || isStrictlyCorrect) {
                         headerClass = "bg-green-50 text-green-700 border-green-100";
                         statusText = `Benar Sempurna (+${formatScore(earned)})`;
                         statusIcon = <CheckCircle size={16} />;
@@ -352,7 +361,7 @@ export default function TryoutReview() {
 
                             {renderAnswerReview(q)}
 
-                            {/* Bagian Laporan (Hidden via print:hidden class + ignoreElements config) */}
+                            {/* Bagian Laporan */}
                             {q.user_report && (
                                 <div className={clsx("mt-6 p-4 rounded-lg border flex gap-3 items-start print:hidden", q.user_report.status === 'resolved' ? "bg-green-50 border-green-200" : "bg-yellow-50 border-yellow-200")}>
                                     {/* ... content laporan ... */}
