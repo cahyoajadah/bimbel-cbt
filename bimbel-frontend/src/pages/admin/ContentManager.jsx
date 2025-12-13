@@ -1,7 +1,7 @@
 // src/pages/admin/ContentManager.jsx
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, Image as ImageIcon, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Image as ImageIcon, FileText, MessageCircle, HelpCircle } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import toast from 'react-hot-toast';
@@ -21,7 +21,7 @@ import katex from 'katex';
 window.katex = katex; // Mount katex ke window agar dikenali Quill
 
 export default function ContentManager() {
-  const [activeTab, setActiveTab] = useState('blog'); 
+  const [activeTab, setActiveTab] = useState('blog'); // Default tab
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -35,7 +35,19 @@ export default function ContentManager() {
     preview: null,
   });
 
-  // Konfigurasi Toolbar Editor Lengkap (Warna, Background, Align)
+  // Helper untuk Label Dinamis
+  const getLabels = () => {
+    switch(activeTab) {
+        case 'testimony': return { title: 'Nama Klien / Siswa', content: 'Isi Testimoni', image: 'Foto Profil' };
+        case 'faq': return { title: 'Pertanyaan (Question)', content: 'Jawaban (Answer)', image: null }; // FAQ tanpa gambar
+        case 'gallery': return { title: 'Judul Foto', content: 'Deskripsi Singkat', image: 'File Gambar' };
+        default: return { title: 'Judul Artikel', content: 'Isi Konten', image: 'Gambar Cover' };
+    }
+  };
+
+  const labels = getLabels();
+
+  // Konfigurasi Toolbar Editor (Warna, Background, Align)
   const modules = {
     toolbar: [
       [{ 'header': [1, 2, 3, false] }],
@@ -61,6 +73,7 @@ export default function ContentManager() {
   const { data: contents, isLoading } = useQuery({
     queryKey: ['admin-contents', activeTab],
     queryFn: async () => {
+      // Mengambil data berdasarkan section (blog, gallery, testimony, faq)
       const res = await api.get(`${API_ENDPOINTS.ADMIN_CONTENTS}?section=${activeTab}`);
       return res.data.data;
     },
@@ -159,16 +172,31 @@ export default function ContentManager() {
 
   // Columns Config
   const columns = [
-    { 
-        header: 'Gambar', 
+    // Kolom Gambar: Tampilkan hanya jika bukan FAQ
+    ...(activeTab !== 'faq' ? [{ 
+        header: activeTab === 'testimony' ? 'Foto' : 'Gambar', 
         accessor: 'image',
         render: (item) => (
             item.image ? 
             <img src={`http://localhost:8000/storage/${item.image}`} alt="thumb" className="w-16 h-16 object-cover rounded" /> 
-            : <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">No Img</div>
+            : <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-400">No Img</div>
         ) 
+    }] : []),
+    
+    { header: labels.title, accessor: 'title', className: 'font-medium' },
+    
+    // Preview Konten Singkat
+    {
+        header: labels.content.split(' ')[0], // Ambil kata pertama (Isi/Jawaban)
+        accessor: 'content',
+        render: (item) => (
+            <div 
+                className="truncate max-w-xs text-gray-600 text-sm"
+                dangerouslySetInnerHTML={{ __html: item.content?.replace(/<[^>]+>/g, '') || '-' }}
+            />
+        )
     },
-    { header: 'Judul', accessor: 'title', className: 'font-medium' },
+
     { 
         header: 'Tanggal', 
         accessor: 'created_at',
@@ -190,33 +218,34 @@ export default function ContentManager() {
     },
   ];
 
+  // Helper Tabs Class
+  const getTabClass = (name) => `px-4 py-2 rounded-md flex items-center text-sm font-medium transition-all ${
+    activeTab === name ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+  }`;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">Manajemen Konten</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Manajemen Konten Landing Page</h1>
         <Button onClick={() => handleOpenModal()}>
           <Plus className="w-4 h-4 mr-2" />
-          Tambah {activeTab === 'blog' ? 'Artikel' : 'Galeri'}
+          Tambah {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
-        <button
-            onClick={() => setActiveTab('blog')}
-            className={`px-4 py-2 rounded-md flex items-center text-sm font-medium transition-all ${
-                activeTab === 'blog' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-        >
+      {/* Tabs Navigation */}
+      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit overflow-x-auto">
+        <button onClick={() => setActiveTab('blog')} className={getTabClass('blog')}>
             <FileText className="w-4 h-4 mr-2" /> Blog
         </button>
-        <button
-            onClick={() => setActiveTab('gallery')}
-            className={`px-4 py-2 rounded-md flex items-center text-sm font-medium transition-all ${
-                activeTab === 'gallery' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-        >
+        <button onClick={() => setActiveTab('gallery')} className={getTabClass('gallery')}>
             <ImageIcon className="w-4 h-4 mr-2" /> Galeri
+        </button>
+        <button onClick={() => setActiveTab('testimony')} className={getTabClass('testimony')}>
+            <MessageCircle className="w-4 h-4 mr-2" /> Testimoni
+        </button>
+        <button onClick={() => setActiveTab('faq')} className={getTabClass('faq')}>
+            <HelpCircle className="w-4 h-4 mr-2" /> FAQ
         </button>
       </div>
 
@@ -226,7 +255,7 @@ export default function ContentManager() {
             columns={columns} 
             data={contents || []} 
             loading={isLoading}
-            emptyMessage="Belum ada konten."
+            emptyMessage={`Belum ada data untuk ${activeTab}.`}
         />
       </div>
 
@@ -234,39 +263,38 @@ export default function ContentManager() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={`${selectedItem ? 'Edit' : 'Tambah'} ${activeTab === 'blog' ? 'Blog' : 'Galeri'}`}
+        title={`${selectedItem ? 'Edit' : 'Tambah'} ${activeTab.toUpperCase()}`}
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Judul"
+            label={labels.title}
+            placeholder={activeTab === 'faq' ? 'Contoh: Berapa biaya pendaftarannya?' : ''}
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             required
           />
           
           {/* Editor React Quill */}
-          {activeTab === 'blog' && (
-              <div className="mb-12"> 
-                <label className="block text-sm font-medium text-gray-700 mb-1">Konten / Isi Artikel</label>
-                <div className="h-64"> 
-                    <ReactQuill 
-                        theme="snow"
-                        value={formData.content}
-                        onChange={(value) => setFormData({ ...formData, content: value })}
-                        modules={modules}
-                        formats={formats}
-                        className="h-56"
-                    />
-                </div>
-              </div>
-          )}
+          <div className="mb-12"> 
+            <label className="block text-sm font-medium text-gray-700 mb-1">{labels.content}</label>
+            <div className="h-64"> 
+                <ReactQuill 
+                    theme="snow"
+                    value={formData.content}
+                    onChange={(value) => setFormData({ ...formData, content: value })}
+                    modules={modules}
+                    formats={formats}
+                    className="h-56"
+                    placeholder={activeTab === 'faq' ? 'Tulis jawaban di sini...' : 'Tulis konten...'}
+                />
+            </div>
+          </div>
 
-          {/* [FIX] Tips Rumus (Diperbaiki agar tidak crash) */}
+          {/* Panduan LaTeX hanya muncul di Blog */}
           {activeTab === 'blog' && (
             <div className="mt-8 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 border border-gray-200">
                 <p className="font-bold mb-1">Panduan Rumus Matematika (LaTeX):</p>
-                {/* [FIX] Gunakan tanda kutip dan kurung kurawal agar {a} tidak dianggap variabel */}
                 <ul className="grid grid-cols-2 gap-x-4 gap-y-1 list-disc pl-4">
                   <li>Pecahan: <code className="bg-gray-200 px-1 rounded">{"\\frac{a}{b}"}</code> → {"$\\frac{a}{b}$"}</li>
                   <li>Pangkat: <code className="bg-gray-200 px-1 rounded">{"x^2"}</code> → {"$x^2$"}</li>
@@ -279,21 +307,23 @@ export default function ContentManager() {
             </div>
           )}
 
-          {/* Image Upload */}
-          <div className="pt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Gambar Cover</label>
-            <div className="flex items-center space-x-4">
-                {formData.preview && (
-                    <img src={formData.preview} alt="Preview" className="w-20 h-20 object-cover rounded border" />
-                )}
-                <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
+          {/* Image Upload (Disembunyikan jika label.image null / FAQ) */}
+          {labels.image && (
+            <div className="pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">{labels.image}</label>
+                <div className="flex items-center space-x-4">
+                    {formData.preview && (
+                        <img src={formData.preview} alt="Preview" className="w-20 h-20 object-cover rounded border" />
+                    )}
+                    <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                </div>
             </div>
-          </div>
+          )}
 
           <div className="flex justify-end space-x-3 pt-6 border-t mt-4">
             <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
