@@ -37,7 +37,7 @@ const menuItems = {
     { path: '/student/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/student/subjects', icon: BookOpen, label: 'Mata Pelajaran' },
     { path: '/student/classes', icon: Video, label: 'Kelas Live' },
-    { path: '/student/tryouts', icon: FileText, label: 'Tryout' },
+    { path: '/student/tryouts', icon: FileText, label: 'Tryout dan Latihan Soal' },
     
     // [BARU] Menu Perangkingan (Pastikan icon tidak dipetik '...')
     { path: '/student/rankings', icon: Trophy, label: 'Perangkingan' },

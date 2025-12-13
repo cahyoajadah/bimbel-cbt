@@ -66,7 +66,10 @@ class SubjectController extends Controller
                 'title' => $material->title,
                 'description' => $material->description,
                 'type' => $material->type,
-                'duration_minutes' => $material->duration_minutes,
+                // [PERBAIKAN 1] Tambahkan baris ini:
+                'content' => $material->content,       // <--- PENTING: Agar PDF bisa dibuka
+                'can_download' => $material->can_download, // <--- PENTING: Untuk izin download
+                // 'duration_minutes' => $material->duration_minutes,
                 'order' => $material->order_number,
                 'is_completed' => $pivot ? $pivot->pivot->is_completed : false,
                 'progress_percentage' => $pivot ? $pivot->pivot->progress_percentage : 0,
@@ -85,45 +88,49 @@ class SubjectController extends Controller
     /**
      * Get materials for a subject (Secured)
      */
+   // app/Http/Controllers/Api/Student/SubjectController.php
+
     public function getMaterials(Request $request, $id)
     {
-        $student = $request->user()->student;
+        $user = $request->user();
+        
+        // Cek apakah user memiliki data student
+        if (!$user->student) {
+            return response()->json(['message' => 'Data siswa tidak ditemukan'], 403);
+        }
+        
+        $student = $user->student;
         $studentProgramIds = $student->programs()->pluck('programs.id');
         
-        // Cek akses subject dulu sebelum ambil materi
+        // Cek akses subject sesuai program siswa
         $subject = Subject::where('id', $id)
             ->where('is_active', true)
-            ->whereIn('program_id', $studentProgramIds) // <--- SECURITY CHECK
+            ->whereIn('program_id', $studentProgramIds)
             ->firstOrFail();
 
         $materials = $subject->materials()
             ->where('is_active', true)
-            ->orderBy('order_number') // <--- PASTIKAN ada tanda panah (->) di sini
+            ->orderBy('order_number')
             ->get()
             ->map(function($material) use ($student) {
                 $pivot = $student->materials()
                     ->where('materials.id', $material->id)
                     ->first();
 
-                $materialData = [
+                return [
                     'id' => $material->id,
                     'title' => $material->title,
                     'description' => $material->description,
                     'type' => $material->type,
+                    
+                    // [PENTING] Wajib ada agar Frontend bisa membaca file/video
+                    'content' => $material->content,       
+                    'can_download' => (int) $material->can_download, // Pastikan jadi angka 1/0
+                    
                     'order' => $material->order_number,
-                    'duration_minutes' => $material->duration_minutes,
                     'is_completed' => $pivot ? $pivot->pivot->is_completed : false,
                     'progress_percentage' => $pivot ? $pivot->pivot->progress_percentage : 0,
                 ];
-
-                // Add content based on type
-                if ($material->type === 'video') {
-                    $materialData['youtube_url'] = $material->content;
-                } else if ($material->type === 'pdf') {
-                    $materialData['pdf_url'] = url('storage/' . $material->content);
-                }
-
-                return $materialData;
             });
 
         return response()->json([

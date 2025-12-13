@@ -17,6 +17,7 @@ class Material extends Model
         'description',
         'order_number', // [PENTING] Gunakan order_number
         'is_active',
+        'can_download', // <--- Tambahkan ini
         // duration_minutes SUDAH DIHAPUS
     ];
 

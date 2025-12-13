@@ -4,15 +4,14 @@
 import { Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { X } from 'lucide-react';
-import { Button } from './Button';
-import clsx from 'clsx'; // <-- TAMBAHKAN INI
+import clsx from 'clsx';
 
 export const Modal = ({
   isOpen,
   onClose,
   title,
   children,
-  size = 'md',
+  size = 'md', // sm, md, lg, xl, full
   showCloseButton = true,
   footer,
 }) => {
@@ -21,7 +20,8 @@ export const Modal = ({
     md: 'max-w-lg',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
-    full: 'max-w-7xl',
+    // [UBAH INI] Gunakan viewport unit agar benar-benar full screen
+    full: 'max-w-[98vw] w-full h-[95vh]', 
   };
 
   return (
@@ -36,11 +36,15 @@ export const Modal = ({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black bg-opacity-25" />
+          <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm" />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4 text-center">
+          {/* Hapus p-4 jika mode full agar lebih maksimal, atau biarkan kecil */}
+          <div className={clsx(
+            "flex min-h-full items-center justify-center text-center",
+            size === 'full' ? 'p-1' : 'p-4' 
+          )}>
             <Transition.Child
               as={Fragment}
               enter="ease-out duration-300"
@@ -51,30 +55,34 @@ export const Modal = ({
               leaveTo="opacity-0 scale-95"
             >
               <Dialog.Panel className={clsx(
-                'w-full transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all',
-                sizes[size]
+                'transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-xl transition-all',
+                'flex flex-col', // [PENTING] Agar header tetap di atas & body mengisi sisa tinggi
+                sizes[size] || sizes.md
               )}>
-                <div className="flex items-center justify-between mb-4">
-                  <Dialog.Title className="text-lg font-medium leading-6 text-gray-900">
+                {/* HEADER */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 shrink-0">
+                  <Dialog.Title className="text-lg font-bold leading-6 text-gray-900">
                     {title}
                   </Dialog.Title>
                   
                   {showCloseButton && (
                     <button
                       onClick={onClose}
-                      className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                      className="rounded-full p-1 hover:bg-gray-200 transition-colors text-gray-500 focus:outline-none"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   )}
                 </div>
 
-                <div className="mt-2">
+                {/* CONTENT BODY */}
+                <div className="flex-1 overflow-y-auto p-6 relative">
                   {children}
                 </div>
 
+                {/* FOOTER */}
                 {footer && (
-                  <div className="mt-6 flex justify-end space-x-2">
+                  <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end space-x-2 shrink-0">
                     {footer}
                   </div>
                 )}

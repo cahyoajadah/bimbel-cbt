@@ -27,66 +27,63 @@ class MaterialController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'subject_id' => 'required|exists:subjects,id',
-            'title' => 'required|string|max:255',
-            'type' => 'required|in:video,pdf,text',
-            // Validasi conditional: Jika type PDF, wajib file. Jika Video/Text, wajib string content_url.
-            'content_file' => 'required_if:type,pdf|file|mimes:pdf|max:10240', 
-            'content_url' => 'required_if:type,video,text|nullable|string',
-            'description' => 'nullable|string',
+   public function store(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'subject_id' => 'required|exists:subjects,id',
+        'title' => 'required|string|max:255',
+        'type' => 'required|in:video,pdf,text',
+        'content_file' => 'required_if:type,pdf|file|mimes:pdf|max:10240',
+        'content_url' => 'required_if:type,video,text|nullable|string',
+        'description' => 'nullable|string',
+        'can_download' => 'boolean' // Validasi boolean
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    DB::beginTransaction();
+    try {
+        $contentPath = null;
+
+        if ($request->type === 'pdf' && $request->hasFile('content_file')) {
+            $contentPath = $request->file('content_file')->store('materials', 'public');
+        } else {
+            $contentPath = $request->content_url;
+        }
+
+        $lastOrder = Material::where('subject_id', $request->subject_id)->max('order_number');
+        $newOrder = $lastOrder ? $lastOrder + 1 : 1;
+
+        $material = Material::create([
+            'subject_id' => $request->subject_id,
+            'title' => $request->title,
+            'type' => $request->type,
+            'content' => $contentPath,
+            'description' => $request->description,
+            'order_number' => $newOrder,
+            'is_active' => true,
+            // [PERBAIKAN] Ambil value boolean secara eksplisit dan simpan
+            'can_download' => $request->boolean('can_download', false),
         ]);
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
+        DB::commit();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Materi berhasil dibuat',
+            'data' => $material->load('subject')
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        if (isset($contentPath) && $request->type === 'pdf') {
+            Storage::disk('public')->delete($contentPath);
         }
-
-        DB::beginTransaction();
-        try {
-            $contentPath = null;
-
-            // 1. Handle Upload PDF
-            if ($request->type === 'pdf' && $request->hasFile('content_file')) {
-                $contentPath = $request->file('content_file')->store('materials', 'public');
-            } 
-            // 2. Handle Video/Text (URL atau Teks Langsung)
-            else {
-                $contentPath = $request->content_url;
-            }
-
-            // Auto Order: Ambil urutan terakhir + 1
-            $lastOrder = Material::where('subject_id', $request->subject_id)->max('order_number');
-            $newOrder = $lastOrder ? $lastOrder + 1 : 1;
-
-            $material = Material::create([
-                'subject_id' => $request->subject_id,
-                'title' => $request->title,
-                'type' => $request->type,
-                'content' => $contentPath,
-                'description' => $request->description,
-                'order_number' => $newOrder,
-                'is_active' => true
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Materi berhasil dibuat',
-                'data' => $material->load('subject')
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            // Hapus file jika database gagal simpan (Rollback File)
-            if (isset($contentPath) && $request->type === 'pdf') {
-                Storage::disk('public')->delete($contentPath);
-            }
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
-        }
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
     }
+}
 
     public function show($id)
     {
@@ -95,68 +92,60 @@ class MaterialController extends Controller
     }
 
     public function update(Request $request, $id)
-    {
-        $material = Material::findOrFail($id);
+{
+    $material = Material::findOrFail($id);
 
-        $validator = Validator::make($request->all(), [
-            'title' => 'required|string|max:255',
-            'type' => 'required|in:video,pdf,text',
-            'description' => 'nullable|string',
-            // Content opsional saat update
-            'content_file' => 'nullable|file|mimes:pdf|max:10240',
-            'content_url' => 'nullable|string',
+    $validator = Validator::make($request->all(), [
+        'title' => 'required|string|max:255',
+        'type' => 'required|in:video,pdf,text',
+        'description' => 'nullable|string',
+        'content_file' => 'nullable|file|mimes:pdf|max:10240',
+        'content_url' => 'nullable|string',
+        'can_download' => 'boolean' // [PERBAIKAN] Tambahkan validasi ini
+    ]);
+
+    if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
+
+    DB::beginTransaction();
+    try {
+        $newContent = $material->content;
+        $oldContent = $material->content;
+        $oldType = $material->type;
+
+        if ($request->type === 'pdf' && $request->hasFile('content_file')) {
+            $newContent = $request->file('content_file')->store('materials', 'public');
+            if ($oldType === 'pdf' && $oldContent) {
+                Storage::disk('public')->delete($oldContent);
+            }
+        } elseif ($request->content_url) {
+            $newContent = $request->content_url;
+            if ($oldType === 'pdf' && $oldContent) {
+                Storage::disk('public')->delete($oldContent);
+            }
+        }
+
+        $material->update([
+            'title' => $request->title,
+            'type' => $request->type,
+            'content' => $newContent,
+            'description' => $request->description,
+            // [PERBAIKAN] Update kolom can_download
+            'can_download' => $request->boolean('can_download'),
         ]);
 
-        if ($validator->fails()) return response()->json(['errors' => $validator->errors()], 422);
+        DB::commit();
 
-        DB::beginTransaction();
-        try {
-            $newContent = $material->content;
-            $oldContent = $material->content;
-            $oldType = $material->type;
+        return response()->json([
+            'success' => true,
+            'message' => 'Materi berhasil diperbarui',
+            'data' => $material->fresh()->load('subject')
+        ]);
 
-            // [LOGIKA PEMBERSIHAN FILE SAAT UPDATE]
-            
-            // A. Jika user upload PDF baru
-            if ($request->type === 'pdf' && $request->hasFile('content_file')) {
-                // Upload yang baru
-                $newContent = $request->file('content_file')->store('materials', 'public');
-                
-                // Hapus file lama (jika dulu tipenya PDF)
-                if ($oldType === 'pdf' && $oldContent) {
-                    Storage::disk('public')->delete($oldContent);
-                }
-            } 
-            // B. Jika ganti ke tipe Video/Text (Link/Text)
-            elseif ($request->content_url) {
-                $newContent = $request->content_url;
-                
-                // Hapus file lama (jika dulu tipenya PDF, sekarang jadi Video/Text)
-                if ($oldType === 'pdf' && $oldContent) {
-                    Storage::disk('public')->delete($oldContent);
-                }
-            }
-
-            $material->update([
-                'title' => $request->title,
-                'type' => $request->type,
-                'content' => $newContent,
-                'description' => $request->description,
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Materi berhasil diperbarui',
-                'data' => $material->fresh()->load('subject')
-            ]);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
-        }
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
     }
+}
 
     public function destroy($id)
     {

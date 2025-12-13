@@ -1,24 +1,26 @@
-// ============================================
 // src/pages/student/SubjectMaterials.jsx
-// ============================================
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Video, FileText, CheckCircle, ArrowLeft, ExternalLink, BookOpen, File } from 'lucide-react';
-import { Button } from '../../components/common/Button';
+import { Video, FileText, CheckCircle, ArrowLeft, BookOpen, File, Download, PlayCircle } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+import { Button } from '../../components/common/Button';
+import { Modal } from '../../components/common/Modal';
 import { getYoutubeEmbedUrl } from '../../utils/helpers';
-import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import toast from 'react-hot-toast';
 
 export default function SubjectMaterials() {
   const { subjectId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  
+  // State untuk materi yang sedang dibuka
+  const [viewingMaterial, setViewingMaterial] = useState(null); 
 
-  // 1. Fetch Data Detail Mapel (Nama, dll)
-  // Tambahkan 'isLoading: isSubjectLoading' untuk memantau loading data ini
+  // Fetch Data Subject
   const { data: subject, isLoading: isSubjectLoading } = useQuery({
     queryKey: ['subject-detail', subjectId],
     queryFn: async () => {
@@ -27,8 +29,7 @@ export default function SubjectMaterials() {
     },
   });
 
-  // 2. Fetch Data Materi
-  // Ubah nama 'isLoading' jadi 'isMaterialsLoading' agar tidak bentrok
+  // Fetch Data Materials
   const { data: materialsData, isLoading: isMaterialsLoading } = useQuery({
     queryKey: ['subject-materials', subjectId],
     queryFn: async () => {
@@ -39,6 +40,7 @@ export default function SubjectMaterials() {
 
   const materials = materialsData || [];
 
+  // Mutation: Tandai Selesai
   const completeMutation = useMutation({
     mutationFn: async (materialId) => {
       const res = await api.post(API_ENDPOINTS.MATERIAL_COMPLETE(materialId), {
@@ -48,135 +50,93 @@ export default function SubjectMaterials() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['subject-materials', subjectId]);
-      toast.success('Materi ditandai selesai');
     },
   });
 
-  // [PERBAIKAN UTAMA]
-  // Tampilkan Spinner jika SALAH SATU data (Subject ATAU Materials) masih loading.
-  // Ini memastikan saat tampilan muncul, Nama Mapel SUDAH ADA.
+  // Handler Klik Tombol
+  const handleViewMaterial = (material) => {
+    // 1. Update progress di background
+    if (!material.pivot?.is_completed) {
+      completeMutation.mutate(material.id);
+    }
+    // 2. Buka Modal Fullscreen
+    setViewingMaterial(material);
+  };
+
   if (isSubjectLoading || isMaterialsLoading) {
     return <LoadingSpinner text="Memuat materi..." />;
   }
 
   return (
     <div className="space-y-6">
+      {/* Header Halaman */}
       <div className="flex items-center space-x-4">
-        <Button
-          variant="ghost"
-          icon={ArrowLeft}
-          onClick={() => navigate('/student/subjects')}
-        >
+        <Button variant="ghost" icon={ArrowLeft} onClick={() => navigate('/student/subjects')}>
           Kembali
         </Button>
         <div>
-          {/* Sekarang subject.name pasti sudah ada karena kita menunggu loading selesai */}
-          <h1 className="text-2xl font-bold text-gray-900">
-            {subject?.name}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            {materials.length} Materi Tersedia
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">{subject?.name}</h1>
+          <p className="mt-1 text-sm text-gray-600">{materials.length} Materi Tersedia</p>
         </div>
       </div>
 
+      {/* Grid Materi */}
       <div className="space-y-4">
         {materials.map((material) => (
-          <div
-            key={material.id}
-            className="bg-white rounded-lg shadow p-6"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-start space-x-4">
-                <div className={clsx(
-                  'w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0',
-                  material.type === 'video' ? 'bg-red-100' : material.type === 'pdf' ? 'bg-orange-100' : 'bg-blue-100'
-                )}>
-                  {material.type === 'video' ? (
-                    <Video className="w-6 h-6 text-red-600" />
-                  ) : material.type === 'pdf' ? (
-                    <File className="w-6 h-6 text-orange-600" />
-                  ) : (
-                    <FileText className="w-6 h-6 text-blue-600" />
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                    {material.title}
-                  </h3>
-                  {material.description && (
-                    <p className="text-sm text-gray-600 mb-2">
-                      {material.description}
-                    </p>
-                  )}
-                  <div className="flex items-center space-x-4 text-sm text-gray-500">
-                    {/* Hapus logika duration_minutes jika di backend sudah dihapus kolomnya */}
-                    <span className="capitalize font-medium bg-gray-100 px-2 py-0.5 rounded text-gray-600">{material.type}</span>
-                  </div>
-                </div>
+          <div key={material.id} className="bg-white rounded-lg shadow p-6 border border-gray-100 hover:shadow-md transition-shadow">
+            <div className="flex items-start gap-4">
+              {/* Icon */}
+              <div className={clsx(
+                'w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0',
+                material.type === 'video' ? 'bg-red-100' : material.type === 'pdf' ? 'bg-orange-100' : 'bg-blue-100'
+              )}>
+                {material.type === 'video' ? <Video className="w-6 h-6 text-red-600" /> : 
+                 material.type === 'pdf' ? <File className="w-6 h-6 text-orange-600" /> : 
+                 <FileText className="w-6 h-6 text-blue-600" />}
               </div>
 
-              {material.pivot?.is_completed ? ( // Pastikan akses pivot benar
-                <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full border border-green-100">
-                  <CheckCircle className="w-4 h-4 mr-1.5" />
-                  <span className="text-sm font-bold">Selesai</span>
+              {/* Info & Tombol */}
+              <div className="flex-1">
+                <div className="flex justify-between items-start">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{material.title}</h3>
+                  {material.pivot?.is_completed && (
+                      <span className="flex items-center text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">
+                          <CheckCircle className="w-3 h-3 mr-1" /> Selesai
+                      </span>
+                  )}
                 </div>
-              ) : null}
+                
+                {material.description && <p className="text-sm text-gray-600 mb-3 line-clamp-2">{material.description}</p>}
+                
+                <div className="flex items-center gap-3 mt-4">
+                  {/* Tombol Lihat Fullscreen */}
+                  <Button
+                      onClick={() => handleViewMaterial(material)}
+                      icon={material.type === 'pdf' ? BookOpen : PlayCircle}
+                      size="sm"
+                      className={clsx(
+                          material.type === 'pdf' ? "bg-orange-600 hover:bg-orange-700 text-white" : "bg-red-600 hover:bg-red-700 text-white"
+                      )}
+                  >
+                      {material.type === 'pdf' ? 'Baca Fullscreen' : 'Tonton Video'}
+                  </Button>
+
+                  {/* Tombol Download (PDF Only & Allowed) */}
+                  {material.type === 'pdf' && material.can_download == 1 && (
+                      <a
+                          href={`${import.meta.env.VITE_API_URL.replace('/api', '')}/storage/${material.content}`}
+                          download
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors border border-gray-200"
+                      >
+                          <Download className="w-4 h-4 mr-2" />
+                          Download
+                      </a>
+                  )}
+                </div>
+              </div>
             </div>
-
-            {/* Video Player */}
-            {material.type === 'video' && material.content && (
-              <div className="mb-4">
-                {/* Pastikan helper getYoutubeEmbedUrl menangani url biasa */}
-                <iframe
-                  className="w-full h-64 md:h-96 rounded-lg shadow-sm border border-gray-200"
-                  src={getYoutubeEmbedUrl(material.content)}
-                  title={material.title}
-                  frameBorder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                ></iframe>
-              </div>
-            )}
-
-            {/* PDF Viewer Link */}
-            {material.type === 'pdf' && material.content && (
-              <div className="mb-4 bg-gray-50 p-4 rounded-lg border border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <File className="text-orange-500" />
-                    <span className="text-sm font-medium text-gray-700 truncate max-w-xs">Dokumen Materi PDF</span>
-                </div>
-                <a
-                  // Asumsikan content adalah path relatif dari storage
-                  href={`${import.meta.env.VITE_API_URL.replace('/api', '')}/storage/${material.content}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-sm"
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Buka PDF
-                </a>
-              </div>
-            )}
-            
-            {/* Text Content */}
-            {material.type === 'text' && material.content && (
-               <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200 prose max-w-none text-sm text-gray-700">
-                  {material.content}
-               </div>
-            )}
-
-            {!material.pivot?.is_completed && (
-              <Button
-                onClick={() => completeMutation.mutate(material.id)}
-                loading={completeMutation.isPending}
-                icon={CheckCircle}
-                className="mt-2"
-              >
-                Tandai Selesai
-              </Button>
-            )}
           </div>
         ))}
       </div>
@@ -188,6 +148,65 @@ export default function SubjectMaterials() {
           <p className="text-gray-500">Materi untuk mata pelajaran ini belum tersedia.</p>
         </div>
       )}
+
+      {/* MODAL FULL SIZE VIEWER */}
+      <Modal
+        isOpen={!!viewingMaterial}
+        onClose={() => setViewingMaterial(null)}
+        title={viewingMaterial?.title || 'Materi'}
+        size="full" // [PENTING] Menggunakan size 'full' yang sudah kita update
+      >
+        <div className="w-full h-full flex flex-col">
+            {/* Konten Viewer */}
+            <div className="flex-1 bg-gray-100 rounded overflow-hidden relative border border-gray-200">
+                {viewingMaterial?.type === 'pdf' ? (
+                    <>
+                        <iframe
+                            // #view=FitH untuk pas lebar
+                            src={`${import.meta.env.VITE_API_URL.replace('/api', '')}/storage/${viewingMaterial.content}#toolbar=0&view=FitH`}
+                            className="w-full h-full"
+                            title="PDF Viewer"
+                        />
+                        {/* Proteksi Download jika tidak diizinkan */}
+                        {!viewingMaterial.can_download && (
+                            <div 
+                                className="absolute inset-0 z-10" 
+                                onContextMenu={(e) => e.preventDefault()}
+                                style={{ pointerEvents: 'none' }}
+                            />
+                        )}
+                    </>
+                ) : viewingMaterial?.type === 'video' ? (
+                    <iframe
+                        className="w-full h-full"
+                        src={getYoutubeEmbedUrl(viewingMaterial.content)}
+                        title={viewingMaterial.title}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                    />
+                ) : (
+                    <div className="p-8 prose max-w-none">
+                        {viewingMaterial?.content}
+                    </div>
+                )}
+            </div>
+
+            {/* Footer Modal Custom (Optional Info) */}
+            <div className="mt-3 flex justify-between items-center text-sm text-gray-500">
+                <span>{viewingMaterial?.description ? viewingMaterial.description : 'Tidak ada deskripsi tambahan.'}</span>
+                {viewingMaterial?.type === 'pdf' && viewingMaterial?.can_download == 1 && (
+                     <a
+                     href={`${import.meta.env.VITE_API_URL.replace('/api', '')}/storage/${viewingMaterial?.content}`}
+                     download
+                     className="text-blue-600 hover:underline flex items-center font-semibold"
+                 >
+                     <Download className="w-4 h-4 mr-1" /> Download File Asli
+                 </a>
+                )}
+            </div>
+        </div>
+      </Modal>
     </div>
   );
 }

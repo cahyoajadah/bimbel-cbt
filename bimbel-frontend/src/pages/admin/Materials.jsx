@@ -16,6 +16,14 @@ export default function Materials() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState('');
+  const [formData, setFormData] = useState({
+    title: '',
+    type: 'pdf',
+    can_download: false, // Default false
+    // ...
+  });
+
+
 
   const { data: subjects } = useQuery({
     queryKey: ['admin-subjects'],
@@ -40,6 +48,7 @@ export default function Materials() {
       data.append('title', formData.title);
       data.append('type', formData.type);
       data.append('description', formData.description || '');
+      data.append('can_download', formData.can_download ? '1' : '0');
       if (formData.type === 'pdf' && formData.content_file?.[0]) data.append('content_file', formData.content_file[0]);
       else if (formData.content_url) data.append('content_url', formData.content_url);
       return (await api.post('/admin/materials', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
@@ -55,6 +64,7 @@ export default function Materials() {
       data.append('title', formData.title);
       data.append('type', formData.type);
       data.append('description', formData.description || '');
+      data.append('can_download', formData.can_download ? '1' : '0');
       if (formData.type === 'pdf' && formData.content_file?.[0]) data.append('content_file', formData.content_file[0]);
       else if (formData.content_url) data.append('content_url', formData.content_url);
       return (await api.post(`/admin/materials/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
@@ -75,9 +85,13 @@ export default function Materials() {
       setValue('type', material.type);
       setValue('description', material.description);
       setValue('content_url', material.content); 
+      setValue('can_download', Boolean(material.can_download));
     } else {
       setEditingMaterial(null);
-      reset({ type: 'text' });
+      reset({ 
+        type: 'text', 
+        can_download: false // Default false
+      });
       if (selectedSubject) setValue('subject_id', selectedSubject);
     }
     setIsModalOpen(true);
@@ -150,13 +164,40 @@ export default function Materials() {
             </select>
           </div>
           {watchedType === 'pdf' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Upload File PDF</label>
-              <input type="file" accept=".pdf" className="mt-1 block w-full text-sm text-gray-500" {...register('content_file', { required: !editingMaterial && watchedType === 'pdf' })} />
-            </div>
-          ) : (
-            <Input label={watchedType === 'video' ? 'Link Video' : 'Link Artikel'} placeholder="https://..." {...register('content_url', { required: 'Link konten wajib diisi' })} />
-          )}
+  <div className="space-y-3"> {/* Bungkus dengan div agar rapi */}
+    
+    {/* 1. Input File PDF (Sudah ada) */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700">Upload File PDF</label>
+      <input 
+        type="file" 
+        accept=".pdf" 
+        className="mt-1 block w-full text-sm text-gray-500" 
+        {...register('content_file', { required: !editingMaterial && watchedType === 'pdf' })} 
+      />
+    </div>
+
+    {/* 2. TAMBAHKAN INI: Checkbox Izin Download */}
+    <div className="flex items-center">
+      <input
+        id="can_download"
+        type="checkbox"
+        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        {...register('can_download')}
+      />
+      <label htmlFor="can_download" className="ml-2 block text-sm text-gray-900">
+        Izinkan siswa mendownload file ini?
+      </label>
+    </div>
+    
+  </div>
+) : (
+  <Input 
+    label={watchedType === 'video' ? 'Link Video' : 'Link Artikel'} 
+    placeholder="https://..." 
+    {...register('content_url', { required: 'Link konten wajib diisi' })} 
+  />
+)}
           <div>
             <label className="block text-sm font-medium text-gray-700">Deskripsi</label>
             <textarea className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" rows="3" {...register('description')}></textarea>
