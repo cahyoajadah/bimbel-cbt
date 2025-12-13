@@ -292,6 +292,25 @@ export default function QuestionPackages() {
 
     const payload = { ...data };
     
+    // [LOGIKA BARU] Kalkulasi Durasi Otomatis untuk Mode Live
+    if (payload.execution_mode === 'live') {
+        const start = new Date(payload.start_date);
+        const end = new Date(payload.end_date);
+        
+        // Hitung selisih dalam milidetik, lalu ubah ke menit
+        const diffInMs = end - start;
+        const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+
+        // Validasi keamanan agar tidak error di backend (min:1)
+        if (diffInMinutes < 1) {
+             return toast.error("Durasi ujian terlalu singkat (minimal 1 menit). Cek kembali jam mulai dan selesai.");
+        }
+
+        // Override value duration_minutes dengan hasil hitungan
+        payload.duration_minutes = diffInMinutes;
+    }
+
+
     // [FIX] Sanitasi payload: Pastikan tanggal dikirim sebagai string murni
     if (payload.start_date && typeof payload.start_date === 'string') {
         // Ambil string mentah dari input (misal "2025-12-13") tanpa konversi Date
@@ -429,7 +448,27 @@ export default function QuestionPackages() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <Input type="number" label="Durasi (Menit)" {...register('duration_minutes', { required: true, min: 1 })} />
+           {/* HANYA TAMPIL JIKA MODE FLEXIBLE */}
+            {executionMode === 'flexible' && (
+                <Input 
+                    type="number" 
+                    label="Durasi (Menit)" 
+                    {...register('duration_minutes', { 
+                        // Wajib diisi hanya jika flexible
+                        required: executionMode === 'flexible', 
+                        min: 1 
+                    })} 
+                />
+            )}
+            
+            {/* Jika mode Live, tampilkan Info Durasi (Opsional, agar user tau) */}
+            {executionMode === 'live' && (
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 text-sm text-blue-800 flex flex-col justify-center">
+                    <span className="font-bold text-xs text-blue-500 uppercase">Durasi Otomatis</span>
+                    <span>Mengikuti jadwal (Start - End)</span>
+                </div>
+            )}
+
             <Input type="number" label="Passing Grade Global" placeholder="Opsional" {...register('passing_score')} />
           </div>
 
