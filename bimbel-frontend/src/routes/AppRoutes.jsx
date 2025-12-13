@@ -152,7 +152,7 @@ function AppRoutes() {
 
         {/* CBT Route */}
         <Route
-          path="/student/cbt/:sessionId"
+          path="/student/cbt"
           element={
             <ProtectedRoute>
               <RoleBasedRoute allowedRoles={['siswa']}>

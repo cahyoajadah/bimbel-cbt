@@ -100,6 +100,9 @@ Route::middleware(['auth:sanctum', 'role:pembuat_soal'])
         Route::get('reports', [QuestionReportController::class, 'index']);
         Route::post('reports/{id}/respond', [QuestionReportController::class, 'respond']);
         Route::get('dashboard', [QuestionMakerDashboard::class, 'index']);
+        Route::post('packages/{packageId}/categories', [QuestionPackageController::class, 'addCategory']);
+        Route::put('packages/{packageId}/categories/{categoryId}', [QuestionPackageController::class, 'updateCategory']);
+        Route::delete('packages/{packageId}/categories/{categoryId}', [QuestionPackageController::class, 'deleteCategory']);
     });
 
 // STUDENT ROUTES
@@ -134,6 +137,12 @@ Route::middleware(['auth:sanctum', 'role:siswa'])
 
     });
 
+    Route::middleware(['auth:sanctum', 'role:siswa'])
+    ->prefix('cbt')
+    ->group(function () {
+        Route::post('start/{packageId}', [CBTController::class, 'startSession']);
+    });
+
 // CBT SESSION ROUTES
 Route::middleware(['auth:sanctum', 'role:siswa', 'cbt.session'])
     ->prefix('cbt')
@@ -141,6 +150,7 @@ Route::middleware(['auth:sanctum', 'role:siswa', 'cbt.session'])
         Route::get('questions', [CBTController::class, 'getQuestions']);
         Route::post('answer', [CBTController::class, 'saveAnswer']);
         Route::post('submit', [CBTController::class, 'submitTryout']);
+        Route::post('start-timer', [CBTController::class, 'startTimer']);
         Route::post('fullscreen-warning', [CBTController::class, 'fullscreenWarning']);
     });
 

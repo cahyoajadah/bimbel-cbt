@@ -1,163 +1,192 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Clock, TrendingUp, ArrowRight, Award, AlertCircle, CheckCircle } from 'lucide-react';
+import { Play, Clock, CheckCircle, RotateCw, AlertTriangle, Calendar, Layers } from 'lucide-react';
 import api from '../../api/axiosConfig';
-import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
-import { LoadingSpinner } from '../../components/common/LoadingSpinner';
-import { useCBTStore } from '../../store/cbtStore';
+import { Modal } from '../../components/common/Modal';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
+
+// [HELPER] Format Tanggal WIB
+const formatDateTime = (isoString) => {
+    if (!isoString) return null;
+    return new Date(isoString).toLocaleString('id-ID', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+    });
+};
 
 export default function Tryouts() {
   const navigate = useNavigate();
-  const { initSession } = useCBTStore();
+  const [selectedTryout, setSelectedTryout] = useState(null);
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ['student-tryouts'],
+  const { data: tryouts, isLoading, refetch } = useQuery({
+    queryKey: ['available-tryouts'],
     queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.TRYOUTS);
+      const res = await api.get('/student/tryouts');
       return res.data.data;
     },
-    refetchOnMount: 'always',
   });
 
-  const tryoutPackages = data || [];
+  const startMutation = useMutation({
+    mutationFn: (id) => api.post(`/cbt/start/${id}`),
+    onSuccess: (res) => {
+      // Struktur: res.data (axios) -> data (laravel response) -> session_token
+      const token = res.data?.data?.session_token;
 
-  const startSessionMutation = useMutation({
-    mutationFn: async (packageId) => {
-      const res = await api.post(API_ENDPOINTS.TRYOUT_START(packageId));
-      return res.data.data;
-    },
-    onSuccess: (sessionData) => {
-      api.get(API_ENDPOINTS.CBT_QUESTIONS, {
-        headers: { 'X-CBT-Session-Token': sessionData.session_token }
-      }).then(res => {
-        initSession(sessionData, res.data.data);
-        if(sessionData.is_resumed) {
-            toast('Melanjutkan sesi sebelumnya...', { icon: '🔄' });
-        } else {
-            toast.success(`Sesi tryout ${sessionData.package.name} dimulai!`);
-        }
-        navigate(`/student/cbt/${sessionData.session_id}`);
-      }).catch(err => {
-        toast.error('Gagal memuat soal. Silakan coba lagi.');
-        useCBTStore.getState().resetSession();
-        console.error(err);
-      });
-    },
-    onError: (error) => {
-      if (error.response?.status === 409) {
-         toast.error("Anda memiliki sesi ujian lain yang belum selesai.", { duration: 4000 });
-         // Opsional: Refresh list agar status terupdate jika backend melakukan auto-cleanup
-         refetch();
+      if (token) {
+        // 2. Simpan Token
+        localStorage.setItem('cbt_token', token);
+
+        toast.success("Ujian dimulai! Mengalihkan...");
+
+        // 3. BERI JEDA 500ms (PENTING)
+        // Agar LocalStorage sempat menulis data sebelum halaman CBT membacanya
+        setTimeout(() => {
+             navigate('/student/cbt');
+        }, 500);
       } else {
-         toast.error(error.response?.data?.message || 'Gagal memulai sesi tryout');
+        console.error("DEBUG: Token TIDAK ditemukan di respon API");
+        toast.error("Gagal memulai: Token sesi hilang.");
       }
     },
+    onError: (err) => {
+        console.error("DEBUG: Error Start:", err);
+        toast.error(err.response?.data?.message || 'Gagal memulai ujian');
+    }
   });
 
-  const handleStartTryout = (packageId) => {
-    startSessionMutation.mutate(packageId);
+  const handleStart = (tryout) => {
+    if (tryout.is_limit_reached) return;
+    
+    // Jika mode live, cek tanggal lagi di frontend (UX only)
+    if (tryout.execution_mode === 'live') {
+        const now = new Date();
+        const start = tryout.start_date ? new Date(tryout.start_date) : null;
+        if (start && now < start) {
+            return toast.error("Ujian belum dimulai");
+        }
+    }
+    
+    setSelectedTryout(tryout);
   };
 
-  if (isLoading) {
-    return <LoadingSpinner text="Memuat daftar tryout..." />;
-  }
+  const confirmStart = () => {
+    if (selectedTryout) {
+        startMutation.mutate(selectedTryout.id);
+        setSelectedTryout(null);
+    }
+  };
+
+  if (isLoading) return <div className="p-8 text-center text-gray-500">Memuat ujian...</div>;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Tryout Tersedia</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Pilih paket tryout yang ingin Anda kerjakan.
-        </p>
-      </div>
-
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          onClick={() => navigate('/student/progress')}
-        >
-          <TrendingUp className="w-4 h-4 mr-2" />
-          Lihat Riwayat & Progres
-        </Button>
+        <p className="text-gray-500 text-sm">Pilih paket tryout yang ingin Anda kerjakan.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {tryoutPackages.map((pkg) => {
-          // [UPDATED] Mengambil nilai langsung dari backend yang sudah di-fix
-          const maxAttempts = pkg.max_attempts; 
-          const userAttempts = pkg.user_attempts_count || 0;
-          // Gunakan flag dari backend jika tersedia, atau hitung manual
-          const canAttempt = pkg.can_attempt !== undefined ? pkg.can_attempt : (userAttempts < maxAttempts);
-
-          return (
-            <div
-              key={pkg.id}
-              className={`bg-white rounded-lg shadow p-6 border-t-4 space-y-4 ${
-                !canAttempt ? 'border-gray-400 opacity-80' : 'border-blue-600'
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <FileText className={`w-6 h-6 ${!canAttempt ? 'text-gray-400' : 'text-blue-600'}`} />
-                <h3 className="text-xl font-bold text-gray-900">{pkg.name}</h3>
-              </div>
-
-              <p className="text-sm text-gray-600 line-clamp-3">{pkg.description || 'Tidak ada deskripsi.'}</p>
-
-              <div className="space-y-2 pt-2 border-t border-gray-100">
-                <div className="flex items-center text-sm text-gray-700">
-                  <Clock className="w-4 h-4 mr-2" />
-                  <span>Durasi: {pkg.duration_minutes} menit</span>
+        {tryouts?.map((tryout) => (
+          <div key={tryout.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all relative group">
+            
+            {/* BADGE LIVE */}
+            {tryout.execution_mode === 'live' && (
+                <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg shadow-sm z-10 flex items-center gap-1 animate-pulse">
+                    <span className="w-2 h-2 bg-white rounded-full"></span> LIVE EVENT
                 </div>
-                <div className="flex items-center text-sm text-gray-700">
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  <span>Total Soal: {pkg.total_questions}</span>
+            )}
+
+            <div className="p-5">
+                {/* [FIX] Akses Program Name dengan Optional Chaining (?.name) */}
+                <div className="text-xs font-bold text-blue-600 mb-1 uppercase tracking-wider">
+                    {tryout.program?.name || 'Program Umum'}
                 </div>
-                {pkg.passing_score > 0 && (
-                  <div className="flex items-center text-sm text-gray-700">
-                    <Award className="w-4 h-4 mr-2 text-yellow-500" />
-                    <span className="font-medium">Passing Score: {pkg.passing_score}</span>
-                  </div>
+                
+                <h3 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
+                    {tryout.name}
+                </h3>
+
+                {/* [FIX] Tampilkan Kategori jika ada */}
+                {tryout.categories && tryout.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                        {tryout.categories.slice(0, 3).map((cat, idx) => (
+                            <span key={idx} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded border border-gray-200">
+                                {cat}
+                            </span>
+                        ))}
+                        {tryout.categories.length > 3 && <span className="text-[10px] text-gray-400">+{tryout.categories.length - 3}</span>}
+                    </div>
                 )}
 
-                {/* [FIX] Menghapus kondisi "Bisa dikerjakan berulang" dan selalu menampilkan kuota */}
-                <div className={`flex items-center text-sm font-medium mt-2 p-2 rounded ${
-                    !canAttempt ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
-                }`}>
-                    {!canAttempt ? <AlertCircle className="w-4 h-4 mr-2"/> : <CheckCircle className="w-4 h-4 mr-2"/>}
-                    <span>
-                        Kesempatan: <strong>{userAttempts}</strong> / {maxAttempts} kali
-                    </span>
+                <div className="space-y-2 text-sm text-gray-600 mt-4">
+                    <div className="flex items-center gap-2">
+                        <Clock size={16} className="text-gray-400" />
+                        <span>{tryout.duration_minutes} Menit</span>
+                    </div>
+                    
+                    {/* Tampilkan Jadwal jika Live */}
+                    {tryout.execution_mode === 'live' && tryout.start_date && (
+                        <div className="flex items-start gap-2 text-red-600 bg-red-50 p-2 rounded text-xs font-medium">
+                            <Calendar size={14} className="mt-0.5 shrink-0" />
+                            <div>
+                                <div>{formatDateTime(tryout.start_date)}</div>
+                                <div className="text-red-400">s/d {formatDateTime(tryout.end_date)}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-2">
+                        <RotateCw size={16} className="text-gray-400" />
+                        <span>Kesempatan: 
+                            <span className={tryout.is_limit_reached ? "text-red-600 font-bold ml-1" : "text-gray-900 font-medium ml-1"}>
+                                {tryout.user_attempts_count} / {tryout.max_attempts ?? '∞'}
+                            </span>
+                        </span>
+                    </div>
                 </div>
-              </div>
-              
-              <Button
-                onClick={() => handleStartTryout(pkg.id)}
-                loading={startSessionMutation.isPending}
-                className="w-full"
-                disabled={!canAttempt || startSessionMutation.isPending}
-                variant={!canAttempt ? "secondary" : "primary"}
-                icon={!canAttempt ? null : ArrowRight}
-              >
-                {startSessionMutation.isPending 
-                    ? 'Memulai Sesi...' 
-                    : !canAttempt 
-                        ? 'Kesempatan Habis' 
-                        : 'Mulai Tryout'
-                }
-              </Button>
             </div>
-          );
-        })}
+
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
+                <Button 
+                    className="w-full justify-center"
+                    icon={tryout.has_ongoing_session ? Play : (tryout.is_limit_reached ? CheckCircle : Play)}
+                    variant={tryout.has_ongoing_session ? 'warning' : (tryout.is_limit_reached ? 'outline' : 'primary')}
+                    onClick={() => handleStart(tryout)}
+                    disabled={tryout.is_limit_reached && !tryout.has_ongoing_session}
+                >
+                    {tryout.has_ongoing_session ? 'Lanjutkan' : (tryout.is_limit_reached ? 'Selesai' : 'Mulai Tryout')}
+                </Button>
+            </div>
+          </div>
+        ))}
+
+        {(!tryouts || tryouts.length === 0) && (
+            <div className="col-span-full py-12 text-center bg-white rounded-xl border border-dashed text-gray-500">
+                Belum ada paket tryout yang tersedia saat ini.
+            </div>
+        )}
       </div>
 
-      {tryoutPackages.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Belum ada paket tryout yang tersedia.</p>
+      {/* MODAL KONFIRMASI */}
+      <Modal isOpen={!!selectedTryout} onClose={() => setSelectedTryout(null)} title="Konfirmasi Mulai" size="sm">
+        <div className="space-y-4">
+            <div className="bg-blue-50 text-blue-800 p-3 rounded-lg text-sm flex gap-3">
+                <AlertTriangle size={20} className="shrink-0" />
+                <div>
+                    <p className="font-bold">Perhatikan!</p>
+                    <p>Waktu akan berjalan segera setelah Anda menekan tombol mulai.</p>
+                    {selectedTryout?.execution_mode === 'live' && (
+                        <p className="mt-2 text-red-700 font-bold">⚠️ Ini adalah Ujian LIVE. Waktu mengacu pada server. Keterlambatan akan mengurangi durasi pengerjaan Anda.</p>
+                    )}
+                </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setSelectedTryout(null)}>Batal</Button>
+                <Button onClick={confirmStart} loading={startMutation.isPending}>Mulai Sekarang</Button>
+            </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

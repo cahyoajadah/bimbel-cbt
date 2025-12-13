@@ -21,7 +21,7 @@ return new class extends Migration
             $table->json('selected_options')->nullable();  // Untuk jawaban Multiple (Checkbox)
             
             $table->boolean('is_correct')->nullable();
-            $table->decimal('point_earned', 8, 2)->default(0);
+            $table->decimal('point_earned', 10, 2)->default(0);
             $table->timestamp('answered_at')->nullable();
             $table->timestamps();
         });

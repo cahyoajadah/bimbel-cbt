@@ -14,7 +14,7 @@ return new class extends Migration
             $table->foreignId('student_id')->constrained('students')->onDelete('cascade');
             $table->foreignId('question_package_id')->constrained('question_packages')->onDelete('cascade');
             $table->string('session_token')->unique();
-            $table->dateTime('start_time');
+            $table->dateTime('start_time')->nullable();
             $table->dateTime('end_time')->nullable();
             $table->enum('status', ['ongoing', 'completed', 'auto_submit'])->default('ongoing');
             $table->boolean('is_fullscreen')->default(true);
