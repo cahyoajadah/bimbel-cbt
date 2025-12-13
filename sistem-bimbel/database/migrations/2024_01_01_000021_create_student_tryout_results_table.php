@@ -18,7 +18,7 @@ return new class extends Migration
             $table->integer('answered_questions');
             $table->integer('correct_answers');
             $table->integer('wrong_answers');
-            $table->decimal('total_score', 8, 2);
+            $table->decimal('total_score', 10, 2)->default(0);
             $table->decimal('percentage', 5, 2);
             $table->boolean('is_passed')->default(false);
             $table->integer('duration_seconds');

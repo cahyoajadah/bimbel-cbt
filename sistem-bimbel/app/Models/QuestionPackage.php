@@ -9,29 +9,23 @@ class QuestionPackage extends Model
 {
     use HasFactory;
 
-    // [PENTING] Pastikan SEMUA nama kolom yang ingin diinput ada di sini
     protected $fillable = [
         'program_id',
         'name',
         'description',
         'duration_minutes',
-        'passing_score',
-        
-        // Field Kategori (Yang baru ditambahkan)
-        'passing_grade_twk',
-        'passing_grade_tiu',
-        'passing_grade_tkp',
-        
+        'passing_score', // Global Passing Score
         'max_attempts',
         'start_date',
         'end_date',   
-        'is_active'
+        'is_active',
+        'execution_mode', // 'flexible' atau 'live'
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
-        'start_date' => 'date',
-        'end_date' => 'date',
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
     ];
 
     public function program()
@@ -44,6 +38,12 @@ class QuestionPackage extends Model
         return $this->hasMany(Question::class);
     }
 
+    // [BARU] Relasi ke Kategori Dinamis
+    public function categories()
+    {
+        return $this->hasMany(QuestionCategory::class);
+    }
+
     public function isAvailable()
     {
         $now = now()->startOfDay();
@@ -51,5 +51,10 @@ class QuestionPackage extends Model
         $start = $this->start_date ? $this->start_date->startOfDay() : $now;
         $end = $this->end_date ? $this->end_date->endOfDay() : $now->addYears(100);
         return $now->between($start, $end);
+    }
+
+    public function tryoutResults()
+    {
+        return $this->hasMany(StudentTryoutResult::class, 'question_package_id');
     }
 }

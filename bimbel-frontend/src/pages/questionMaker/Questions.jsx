@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, ArrowLeft, X, ListPlus, Eye } from 'lucide-react';
+import { Plus, Edit, Trash2, ArrowLeft, X, ListPlus, Eye, Save } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { API_ENDPOINTS } from '../../api/endpoints';
 import { Button } from '../../components/common/Button';
@@ -17,6 +17,8 @@ import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css'; 
 import 'katex/dist/katex.min.css'; 
 import katex from 'katex';
+
+// Bind Katex ke window agar Quill bisa mendeteksinya
 window.katex = katex; 
 
 export default function Questions() {
@@ -24,14 +26,15 @@ export default function Questions() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { showConfirm } = useUIStore();
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  // Ref untuk instance Quill (tidak wajib dipakai langsung jika pakai modules custom)
+  // Ref untuk instance Quill
   const quillRef = useRef(null); 
 
-  // Konfigurasi Modules Quill dengan Handler Upload Gambar Custom
+  // --- KONFIGURASI QUILL EDITOR ---
   const getModules = (isSimple = false) => ({
     toolbar: {
         container: isSimple 
@@ -89,7 +92,7 @@ export default function Questions() {
     'link', 'image', 'formula'
   ];
 
-  // Fetch Package Info
+  // --- FETCH DATA ---
   const { data: packageData } = useQuery({
     queryKey: ['question-package', packageId],
     queryFn: async () => {
@@ -98,33 +101,43 @@ export default function Questions() {
     },
   });
 
-  // Fetch Questions
+  const categories = packageData?.categories || [];
+
   const { data: questionsData, isLoading } = useQuery({
     queryKey: ['questions', packageId],
     queryFn: async () => {
-      const res = await api.get(API_ENDPOINTS.QUESTIONS(packageId));
+      const url = API_ENDPOINTS.QUESTIONS ? API_ENDPOINTS.QUESTIONS(packageId) : `/question-maker/packages/${packageId}/questions`;
+      const res = await api.get(url);
       return res.data.data;
     },
   });
 
-  const questions = Array.isArray(questionsData?.questions) ? questionsData.questions : (Array.isArray(questionsData) ? questionsData : []);
+  const questions = Array.isArray(questionsData) ? questionsData : (questionsData?.questions || []);
 
-  // Form Handling
+  // Hitung nomor urut fleksibel (displayIndex)
+  const processedQuestions = useMemo(() => {
+    return questions.map((q, index) => ({
+      ...q,
+      displayIndex: index + 1
+    }));
+  }, [questions]);
+
+  // --- FORM HANDLING ---
   const { 
     register, control, handleSubmit, reset, watch, setValue, formState: { errors } 
   } = useForm({
     defaultValues: {
-      type: 'single',
-      category: 'General', // [BARU] Default kategori
+      type: 'single', 
+      question_category_id: '',
       question_text: '',
-      duration_seconds: 60,
       point: 5,
       explanation: '',
       options: [
-        { label: 'A', text: '', is_correct: false, weight: 0 },
-        { label: 'B', text: '', is_correct: false, weight: 0 },
-        { label: 'C', text: '', is_correct: false, weight: 0 },
-        { label: 'D', text: '', is_correct: false, weight: 0 },
+        { option_text: '', is_correct: false, weight: 0 },
+        { option_text: '', is_correct: false, weight: 0 },
+        { option_text: '', is_correct: false, weight: 0 },
+        { option_text: '', is_correct: false, weight: 0 },
+        { option_text: '', is_correct: false, weight: 0 },
       ],
       short_answer_key: ''
     },
@@ -147,62 +160,20 @@ export default function Questions() {
     setValue('options', updated);
   };
 
+  // --- MUTATIONS ---
   const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const payload = { ...data };
-      if (data.explanation) payload.discussion = data.explanation;
-
-      if (payload.type === 'short') {
-        payload.options = [{
-          option_text: data.short_answer_key, 
-          is_correct: true,
-          weight: 0
-        }];
-      } else {
-        payload.options = data.options.map((opt, idx) => ({
-          ...opt,
-          option_text: opt.text, 
-          label: String.fromCharCode(65 + idx)
-        }));
-      }
-
-      const res = await api.post(API_ENDPOINTS.QUESTIONS(packageId), payload);
-      return res.data;
-    },
+    mutationFn: (data) => api.post(`/question-maker/packages/${packageId}/questions`, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['questions', packageId]);
-      queryClient.invalidateQueries(['question-package', packageId]);
       setIsModalOpen(false);
       reset();
-      toast.success('Soal berhasil dibuat');
+      toast.success('Soal berhasil ditambahkan');
     },
-    onError: (err) => {
-        toast.error(err.response?.data?.message || 'Gagal membuat soal');
-    }
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal tambah soal'),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const payload = { ...data };
-      if (data.explanation) payload.discussion = data.explanation;
-      
-      if (payload.type === 'short') {
-        payload.options = [{
-          option_text: data.short_answer_key,
-          is_correct: true,
-          weight: 0
-        }];
-      } else {
-        payload.options = data.options.map((opt, idx) => ({
-          ...opt,
-          option_text: opt.text,
-          label: String.fromCharCode(65 + idx)
-        }));
-      }
-
-      const res = await api.put(API_ENDPOINTS.QUESTION_DETAIL(packageId, id), payload);
-      return res.data;
-    },
+    mutationFn: ({ id, data }) => api.put(`/question-maker/packages/${packageId}/questions/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries(['questions', packageId]);
       setIsModalOpen(false);
@@ -210,73 +181,51 @@ export default function Questions() {
       reset();
       toast.success('Soal berhasil diperbarui');
     },
+    onError: (err) => toast.error(err.response?.data?.message || 'Gagal update soal'),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      await api.delete(API_ENDPOINTS.QUESTION_DETAIL(packageId, id));
-    },
+    mutationFn: (id) => api.delete(`/question-maker/packages/${packageId}/questions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries(['questions', packageId]);
-      toast.success('Soal berhasil dihapus');
+      toast.success('Soal dihapus');
     },
   });
 
+  // --- HANDLERS ---
   const handleOpenModal = (question = null) => {
+    setEditingQuestion(question);
     if (question) {
-      setEditingQuestion(question);
-      
+      setValue('type', question.type);
+      setValue('question_category_id', question.question_category_id || (question.category?.id) || '');
+      setValue('question_text', question.question_text);
+      setValue('point', question.point);
+      setValue('explanation', question.explanation || '');
+
       const rawOptions = question.answer_options || question.options || [];
-      
-      let formattedOptions = rawOptions.map(opt => ({
+      const formattedOptions = rawOptions.map(opt => ({
         id: opt.id,
-        label: opt.option_label || opt.label, 
-        text: opt.option_text || opt.text || opt.answer_text || '', 
+        option_text: opt.option_text || opt.text || '',
         is_correct: Boolean(opt.is_correct),
         weight: parseInt(opt.weight || 0)
       }));
+      
+      setValue('options', formattedOptions);
 
-      let shortAnswerKey = '';
       if (question.type === 'short') {
-        const correctOpt = formattedOptions.find(o => o.is_correct);
-        shortAnswerKey = correctOpt ? correctOpt.text : '';
+         const correctOpt = formattedOptions.find(o => o.is_correct);
+         setValue('short_answer_key', correctOpt ? correctOpt.option_text : '');
       }
 
-      if (formattedOptions.length === 0 && question.type !== 'short') {
-          formattedOptions = [
-            { label: 'A', text: '', is_correct: false, weight: 0 },
-            { label: 'B', text: '', is_correct: false, weight: 0 },
-            { label: 'C', text: '', is_correct: false, weight: 0 },
-            { label: 'D', text: '', is_correct: false, weight: 0 },
-          ];
-      }
-
-      reset({
-        type: question.type || 'single',
-        category: question.category || 'General', // [BARU] Load kategori saat edit
-        question_text: question.question_text || '',
-        duration_seconds: question.duration_seconds,
-        point: question.point,
-        explanation: question.explanation || question.discussion || '', 
-        options: formattedOptions, 
-        short_answer_key: shortAnswerKey
-      });
     } else {
-      setEditingQuestion(null);
       reset({
-        type: 'single',
-        category: 'General', // [BARU] Default kategori baru
+        type: 'single', 
+        question_category_id: '',
         question_text: '',
-        duration_seconds: 60,
         point: 5,
         explanation: '',
         short_answer_key: '',
-        options: [
-            { label: 'A', text: '', is_correct: false, weight: 0 },
-            { label: 'B', text: '', is_correct: false, weight: 0 },
-            { label: 'C', text: '', is_correct: false, weight: 0 },
-            { label: 'D', text: '', is_correct: false, weight: 0 },
-        ]
+        options: Array(5).fill({ option_text: '', is_correct: false, weight: 0 })
       });
     }
     setIsModalOpen(true);
@@ -284,13 +233,13 @@ export default function Questions() {
 
   const onSubmit = (data) => {
     if (data.type === 'single') {
-        const correctCount = data.options.filter(opt => opt.is_correct).length;
-        if (correctCount !== 1) return toast.error('Pilih tepat 1 jawaban benar untuk Pilihan Ganda');
+       const correctCount = data.options.filter(opt => opt.is_correct).length;
+       if (correctCount !== 1) return toast.error('Pilihan Ganda harus memiliki tepat 1 jawaban benar!');
     }
     
     if (data.type === 'multiple') {
-        const correctCount = data.options.filter(opt => opt.is_correct).length;
-        if (correctCount < 1) return toast.error('Pilih minimal 1 jawaban benar untuk Pilihan Ganda Kompleks');
+       const hasCorrect = data.options.some(opt => opt.is_correct);
+       if (!hasCorrect) return toast.error('Pilihan Ganda Kompleks minimal harus ada 1 jawaban benar!');
     }
 
     if (data.type === 'weighted') {
@@ -298,55 +247,62 @@ export default function Questions() {
         if (!hasWeight) return toast.error('Minimal satu opsi harus memiliki bobot nilai > 0');
     }
 
+    const payload = { ...data };
+    
+    if (payload.type === 'short') {
+        payload.options = [{
+          option_text: data.short_answer_key, 
+          is_correct: true,
+          weight: 0
+        }];
+    } 
+
     if (editingQuestion) {
-      updateMutation.mutate({ id: editingQuestion.id, data });
+      updateMutation.mutate({ id: editingQuestion.id, data: payload });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(payload);
     }
   };
 
-  const handleDelete = (question) => {
-    if (showConfirm) {
-        showConfirm({
-          title: 'Hapus Soal',
-          message: `Hapus soal no. ${question.order_number}?`,
-          type: 'danger',
-          confirmText: 'Hapus',
-          onConfirm: () => deleteMutation.mutate(question.id),
-        });
-    } else {
-        if (window.confirm(`Hapus soal no. ${question.order_number}?`)) {
-            deleteMutation.mutate(question.id);
-        }
-    }
+  const handleDelete = (id) => {
+    showConfirm({
+      title: 'Hapus Soal',
+      message: 'Yakin hapus soal ini?',
+      type: 'danger',
+      onConfirm: () => deleteMutation.mutate(id),
+    });
   };
 
   const stripHtml = (html) => {
+     if(!html) return "";
      const tmp = document.createElement("DIV");
      tmp.innerHTML = html;
      return tmp.textContent || tmp.innerText || "";
   };
 
+  // --- TABEL COLUMNS ---
   const columns = [
-    { header: 'No.', accessor: 'order_number' },
+    { 
+        header: 'No.', 
+        accessor: 'displayIndex',
+        className: 'w-16 text-center font-bold'
+    },
     { 
       header: 'Tipe', 
       render: (row) => {
-        const types = {
-            single: 'Pilihan Ganda',
-            multiple: 'Kompleks',
-            weighted: 'Bobot (TKD)',
-            short: 'Isian'
-        };
-        return <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium">{types[row.type] || row.type}</span>;
+        return <span className="px-2 py-1 bg-gray-100 rounded text-xs font-medium capitalize">
+            {row.type === 'single' ? 'Pilihan Ganda' : 
+             row.type === 'multiple' ? 'Kompleks' : 
+             row.type === 'weighted' ? 'Bobot' : 
+             'Isian'}
+        </span>;
       }
     },
-    // [BARU] Kolom Kategori di Tabel
     {
       header: 'Kategori',
       render: (row) => (
         <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-bold border border-blue-100">
-            {row.category || 'Umum'}
+            {row.category_name || row.category?.name || 'Umum'}
         </span>
       )
     },
@@ -369,17 +325,13 @@ export default function Questions() {
           />
           <Button 
             size="sm" variant="ghost" icon={Edit} 
-            onClick={() => handleOpenModal(row)}
-          >
-            Edit
-          </Button>
+            onClick={() => handleOpenModal(row)} 
+          />
           <Button 
             size="sm" variant="ghost" icon={Trash2} 
-            onClick={() => handleDelete(row)} 
-            className="text-red-600 hover:bg-red-50"
-          >
-            Hapus
-          </Button>
+            className="text-red-600 hover:bg-red-50" 
+            onClick={() => handleDelete(row.id)} 
+          />
         </div>
       ),
     },
@@ -387,8 +339,9 @@ export default function Questions() {
 
   return (
     <div className="space-y-6">
+      {/* HEADER */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-4">
           <Button variant="ghost" icon={ArrowLeft} onClick={() => navigate('/question-maker/packages')}>
             Kembali
           </Button>
@@ -397,175 +350,230 @@ export default function Questions() {
             <p className="text-sm text-gray-600">Kelola butir soal untuk paket ini</p>
           </div>
         </div>
-        <Button icon={Plus} onClick={() => handleOpenModal()}>Buat Soal Baru</Button>
+        <Button icon={Plus} onClick={() => handleOpenModal()}>Tambah Soal</Button>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
-        <Table columns={columns} data={questions} loading={isLoading} emptyMessage="Belum ada soal." />
+      {/* LIST SOAL (MOBILE VIEW ONLY) */}
+      {/* [FIX] Tambahkan md:hidden agar tidak muncul ganda di desktop */}
+      <div className="space-y-4 md:hidden">
+        {processedQuestions?.length > 0 ? (
+            processedQuestions.map((q, idx) => (
+                <div key={q.id} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:border-blue-300 transition-colors">
+                    <div className="flex justify-between items-start gap-4">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded">
+                                    No. {idx + 1}
+                                </span>
+                                <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded capitalize">
+                                    {q.type === 'multiple' ? 'Pilihan Ganda' : q.type === 'weighted' ? 'Bobot' : 'Isian'}
+                                </span>
+                                {q.category_name || q.category?.name ? (
+                                    <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded font-medium">
+                                        {q.category_name || q.category?.name}
+                                    </span>
+                                ) : null}
+                                <span className="text-xs text-gray-400">Poin: {q.point}</span>
+                            </div>
+                            <div 
+                                className="text-gray-800 text-sm line-clamp-2 prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: q.question_text }}
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            <Button 
+                                size="sm" variant="ghost" icon={Eye} 
+                                onClick={() => { setEditingQuestion(q); setIsPreviewOpen(true); }}
+                            />
+                            <Button 
+                                size="sm" variant="ghost" icon={Edit} 
+                                onClick={() => handleOpenModal(q)} 
+                            />
+                            <Button 
+                                size="sm" variant="ghost" icon={Trash2} 
+                                className="text-red-600 hover:bg-red-50" 
+                                onClick={() => handleDelete(q.id)} 
+                            />
+                        </div>
+                    </div>
+                </div>
+            ))
+        ) : (
+            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500">
+                Belum ada soal di paket ini.
+            </div>
+        )}
+      </div>
+
+      {/* TABLE VIEW (DESKTOP ONLY) */}
+      <div className="hidden md:block bg-white rounded-lg shadow">
+        <Table columns={columns} data={processedQuestions} loading={isLoading} emptyMessage="Belum ada soal." />
       </div>
 
       {/* MODAL PREVIEW */}
       <Modal isOpen={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} title="Preview Soal" size="lg">
         {editingQuestion && (
-           <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">
-                      {editingQuestion.category || 'Umum'}
-                  </span>
-                  <span className="text-xs text-gray-500">Poin: {editingQuestion.point}</span>
-              </div>
-              <div className="p-4 bg-gray-50 rounded border prose max-w-none ql-editor" dangerouslySetInnerHTML={{ __html: editingQuestion.question_text }} />
-              <div className="grid gap-2">
-                 {(editingQuestion.answer_options || editingQuestion.options || []).map((opt, idx) => (
-                    <div key={idx} className={`p-2 border rounded flex ${opt.is_correct ? 'bg-green-50 border-green-300' : 'bg-white'}`}>
-                        <span className="font-bold mr-2">{opt.label || String.fromCharCode(65+idx)}.</span>
-                        <div dangerouslySetInnerHTML={{ __html: opt.option_text || opt.text }} />
+            <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded">
+                        {editingQuestion.category?.name || editingQuestion.category_name || '-'}
+                    </span>
+                    <span className="text-xs text-gray-500">Poin: {editingQuestion.point}</span>
+                </div>
+                <div className="p-4 bg-gray-50 rounded border prose max-w-none ql-editor" dangerouslySetInnerHTML={{ __html: editingQuestion.question_text }} />
+                
+                <div className="grid gap-2">
+                    {(editingQuestion.answer_options || editingQuestion.options || []).map((opt, idx) => (
+                    <div key={idx} className={`p-2 border rounded flex items-center ${opt.is_correct ? 'bg-green-50 border-green-300' : 'bg-white'}`}>
+                        <span className="font-bold mr-2 w-6 text-center">{String.fromCharCode(65+idx)}.</span>
+                        <div className="flex-1" dangerouslySetInnerHTML={{ __html: opt.option_text || opt.text }} />
+                        {opt.weight > 0 && <span className="text-xs bg-gray-200 px-2 py-1 rounded ml-2">Bobot: {opt.weight}</span>}
                     </div>
-                 ))}
-              </div>
-              <div className="flex justify-end"><Button onClick={() => setIsPreviewOpen(false)}>Tutup</Button></div>
-           </div>
+                    ))}
+                </div>
+
+                {editingQuestion.explanation && (
+                    <div className="mt-4 p-3 bg-yellow-50 border border-yellow-100 rounded">
+                        <p className="font-bold text-sm text-yellow-800 mb-1">Pembahasan:</p>
+                        <div className="text-sm text-yellow-900 prose max-w-none" dangerouslySetInnerHTML={{ __html: editingQuestion.explanation }} />
+                    </div>
+                )}
+                
+                <div className="flex justify-end"><Button onClick={() => setIsPreviewOpen(false)}>Tutup</Button></div>
+            </div>
         )}
       </Modal>
 
-      {/* MODAL FORM */}
+      {/* MODAL FORM SOAL */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title={editingQuestion ? 'Edit Soal' : 'Buat Soal Baru'}
         size="2xl"
       >
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
-            {/* [BARU] Dropdown Kategori Soal menggunakan React Hook Form */}
-            <div className="md:col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
-                <select 
-                    className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                    {...register('category', { required: true })}
-                >
-                    <option value="General">Umum</option>
-                    <option value="TWK">TWK</option>
-                    <option value="TIU">TIU</option>
-                    <option value="TKP">TKP</option>
-                </select>
-            </div>
-
-            <div className="md:col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Soal</label>
-                <select 
-                    className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500"
-                    {...register('type')}
-                >
-                    <option value="single">Pilihan Ganda</option>
-                    <option value="multiple">Kompleks</option>
-                    <option value="weighted">Bobot (TKD)</option>
-                    <option value="short">Isian Singkat</option>
-                </select>
-            </div>
-            <div className="md:col-span-1">
-                <Input 
-                    label="Poin" 
-                    type="number" 
-                    {...register('point', { valueAsNumber: true })} 
-                />
-            </div>
-            <div className="md:col-span-1">
-                <Input 
-                    label="Durasi (s)" 
-                    type="number" 
-                    {...register('duration_seconds', { valueAsNumber: true })} 
-                />
-            </div>
-          </div>
-
-          {/* Editor Pertanyaan */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Teks Pertanyaan</label>
-            <div className="h-64 mb-8"> 
-                <Controller
-                    name="question_text"
-                    control={control}
-                    rules={{ required: 'Pertanyaan wajib diisi' }}
-                    render={({ field }) => (
-                        <ReactQuill 
-                            theme="snow"
-                            value={field.value || ''} 
-                            onChange={field.onChange}
-                            modules={mainModules}
-                            formats={formats}
-                            className="h-56"
-                            placeholder="Tulis pertanyaan, rumus matematika, atau gambar..."
-                        />
-                    )}
-                />
-            </div>
-            {errors.question_text && <p className="text-red-500 text-xs mt-1">{errors.question_text.message}</p>}
-          </div>
-
-          <div className="border-t pt-4">
-            <div className="flex justify-between items-center mb-3">
-                <label className="block text-sm font-bold text-gray-800">
-                    {watchedType === 'short' ? 'Kunci Jawaban' : 'Opsi Jawaban'}
-                </label>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-blue-50 p-4 rounded-lg border border-blue-100">
                 
-                {watchedType !== 'short' && (
-                    <Button 
-                        type="button" 
-                        size="sm" 
-                        variant="outline" 
-                        icon={ListPlus}
-                        onClick={() => append({ label: '', text: '', is_correct: false, weight: 0 })}
+                {/* 1. Tipe Soal */}
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Tipe Soal</label>
+                    <select className="w-full border border-gray-300 rounded-lg p-2" {...register('type')}>
+                        <option value="single">Pilihan Ganda (Satu Jawaban)</option>
+                        <option value="multiple">Pilihan Ganda Kompleks (Banyak Jawaban)</option>
+                        <option value="weighted">Pilihan Ganda Bobot (TKD)</option>
+                        <option value="short">Isian Singkat</option>
+                    </select>
+                </div>
+
+                {/* 2. Kategori */}
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Kategori <span className="text-red-500">*</span></label>
+                    <select 
+                        className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                        {...register('question_category_id', { required: 'Kategori wajib dipilih' })}
                     >
-                        Tambah Opsi
-                    </Button>
-                )}
+                        <option value="">-- Pilih Kategori --</option>
+                        {categories.map((cat) => (
+                            <option key={cat.id} value={cat.id}>
+                                {cat.name} (PG: {cat.passing_grade})
+                            </option>
+                        ))}
+                    </select>
+                    {errors.question_category_id && <p className="text-red-500 text-xs mt-1">{errors.question_category_id.message}</p>}
+                    {categories.length === 0 && (
+                        <p className="text-xs text-orange-600 mt-1 font-medium">
+                            ⚠ Belum ada kategori.
+                        </p>
+                    )}
+                </div>
+
+                {/* 3. Poin */}
+                <div>
+                    <Input label="Poin (Bobot Maksimal)" type="number" {...register('point', { min: 1 })} className="bg-white" />
+                </div>
             </div>
 
-            {watchedType === 'short' && (
-                <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
-                    <p className="text-sm text-yellow-800 mb-2">Masukkan satu kata atau angka pasti sebagai kunci jawaban.</p>
-                    <Input 
-                        placeholder="Contoh: 1945 atau Soekarno"
-                        {...register('short_answer_key', { required: watchedType === 'short' })}
+            {/* Editor Soal */}
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Pertanyaan</label>
+                <div className="h-64 mb-10">
+                    <Controller
+                        name="question_text"
+                        control={control}
+                        rules={{ required: 'Pertanyaan wajib diisi' }}
+                        render={({ field }) => (
+                            <ReactQuill 
+                                theme="snow"
+                                ref={quillRef} 
+                                value={field.value || ''} 
+                                onChange={field.onChange} 
+                                modules={mainModules}
+                                formats={formats}
+                                className="h-48"
+                                placeholder="Tulis pertanyaan..."
+                            />
+                        )}
                     />
                 </div>
-            )}
+                {errors.question_text && <p className="text-red-500 text-xs mt-1">{errors.question_text.message}</p>}
+            </div>
 
-            {watchedType !== 'short' && (
-                <div className="space-y-3">
-                    {fields.map((item, index) => (
-                        <div key={item.id} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-white transition-colors">
-                            
-                            <div className="flex flex-col items-center gap-2 pt-2">
-                                <span className="font-bold text-gray-500 w-6 text-center">{String.fromCharCode(65 + index)}</span>
-                                
-                                {watchedType === 'single' && (
-                                    <input 
-                                        type="radio" 
-                                        className="w-5 h-5 text-blue-600 cursor-pointer"
-                                        checked={watchedOptions?.[index]?.is_correct === true}
-                                        onChange={() => handleSingleCorrectChange(index)}
-                                        title="Tandai sebagai jawaban benar"
-                                    />
-                                )}
-                                
-                                {watchedType === 'multiple' && (
-                                    <input 
-                                        type="checkbox" 
-                                        className="w-5 h-5 text-blue-600 rounded cursor-pointer"
-                                        {...register(`options.${index}.is_correct`)}
-                                        title="Centang jika ini jawaban benar"
-                                    />
-                                )}
-                            </div>
+            {/* Opsi Jawaban */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-bold text-gray-700">
+                        {watchedType === 'short' ? 'Kunci Jawaban' : 'Opsi Jawaban'}
+                    </h4>
+                    {watchedType !== 'short' && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => append({ option_text: '', is_correct: false, weight: 0 })} icon={ListPlus}>
+                            Tambah Opsi
+                        </Button>
+                    )}
+                </div>
+                
+                {watchedType === 'short' ? (
+                    <div className="p-3 bg-blue-50 rounded text-sm text-blue-700 border border-blue-100">
+                        <p className="mb-2 font-medium">Masukkan jawaban pasti (Sistem akan mencocokkan teks):</p>
+                        <Input placeholder="Contoh: Soekarno" {...register('short_answer_key', { required: true })} className="bg-white" />
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {fields.map((field, index) => (
+                            <div key={field.id} className="flex gap-2 items-start bg-white p-2 rounded border border-gray-200 shadow-sm">
+                                <div className="flex flex-col items-center gap-2 pt-2">
+                                    <span className="font-bold text-gray-500 w-6 text-center bg-gray-100 rounded text-xs py-1">
+                                        {String.fromCharCode(65 + index)}
+                                    </span>
+                                    
+                                    {/* LOGIKA INPUT KUNCI JAWABAN */}
+                                    
+                                    {/* 1. SINGLE: Radio Button */}
+                                    {watchedType === 'single' && (
+                                        <input 
+                                            type="radio" 
+                                            className="w-5 h-5 text-blue-600 cursor-pointer mt-1"
+                                            checked={watchedOptions?.[index]?.is_correct === true}
+                                            onChange={() => handleSingleCorrectChange(index)}
+                                            title="Tandai sebagai jawaban benar"
+                                        />
+                                    )}
 
-                            <div className="flex-1 space-y-2">
-                                {/* Editor Opsi Jawaban */}
-                                <div className="bg-white">
+                                    {/* 2. MULTIPLE: Checkbox */}
+                                    {watchedType === 'multiple' && (
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-5 h-5 text-blue-600 cursor-pointer mt-1 rounded"
+                                            {...register(`options.${index}.is_correct`)}
+                                            title="Tandai sebagai salah satu jawaban benar"
+                                        />
+                                    )}
+
+                                    {/* 3. WEIGHTED: Bobot via input number di kanan */}
+                                </div>
+
+                                <div className="flex-1 min-w-0">
                                     <Controller
-                                        name={`options.${index}.text`}
+                                        name={`options.${index}.option_text`}
                                         control={control}
                                         rules={{ required: true }}
                                         render={({ field }) => (
@@ -574,81 +582,61 @@ export default function Questions() {
                                                 value={field.value || ''}
                                                 onChange={field.onChange}
                                                 modules={simpleModules}
-                                                className="h-auto"
+                                                className="bg-white"
                                                 placeholder={`Teks opsi ${String.fromCharCode(65 + index)}`}
                                             />
                                         )}
                                     />
                                 </div>
-                                
+
                                 {watchedType === 'weighted' && (
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-xs font-medium text-gray-600">Bobot Nilai:</label>
+                                    <div className="w-20 pt-1">
+                                        <label className="text-[10px] font-bold text-gray-500 block mb-1">BOBOT</label>
                                         <input 
                                             type="number" 
-                                            className="w-20 rounded border border-gray-300 px-2 py-1 text-sm"
+                                            className="w-full border rounded p-1 text-sm text-center"
                                             placeholder="0"
                                             {...register(`options.${index}.weight`, { valueAsNumber: true })}
                                         />
                                     </div>
                                 )}
+
+                                <button type="button" onClick={() => remove(index)} className="text-gray-400 hover:text-red-500 p-1 pt-3">
+                                    <X size={18} />
+                                </button>
                             </div>
-
-                            <button 
-                                type="button"
-                                onClick={() => remove(index)}
-                                className="text-gray-400 hover:text-red-500 p-1"
-                                disabled={fields.length <= 2}
-                                title="Hapus opsi ini"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-          </div>
-
-          {/* Editor Pembahasan */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Pembahasan / Penjelasan</label>
-            <div className="h-48 mb-8">
-                <Controller
-                    name="explanation"
-                    control={control}
-                    render={({ field }) => (
-                        <ReactQuill 
-                            theme="snow"
-                            value={field.value || ''}
-                            onChange={field.onChange}
-                            modules={mainModules}
-                            formats={formats}
-                            className="h-40"
-                            placeholder="Jelaskan kenapa jawaban tersebut benar..."
-                        />
-                    )}
-                />
+                        ))}
+                    </div>
+                )}
             </div>
-          </div>
 
-          <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600 border border-gray-200">
-             <p className="font-bold mb-1">Panduan Rumus (LaTeX):</p>
-             <ul className="grid grid-cols-2 gap-x-4 gap-y-1 list-disc pl-4">
-               <li>Pecahan: <code className="bg-gray-200 px-1 rounded">{"\\frac{a}{b}"}</code></li>
-               <li>Pangkat: <code className="bg-gray-200 px-1 rounded">{"x^2"}</code></li>
-               <li>Akar: <code className="bg-gray-200 px-1 rounded">{"\\sqrt{x}"}</code></li>
-               <li>Integral: <code className="bg-gray-200 px-1 rounded">{"\\int"}</code></li>
-             </ul>
-             <p className="mt-1 italic">Klik tombol <b>fx</b> pada toolbar untuk rumus. Klik tombol <b>Gambar</b> untuk upload.</p>
-          </div>
+            {/* Editor Pembahasan */}
+            <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Pembahasan (Opsional)</label>
+                <div className="h-40 mb-10">
+                    <Controller
+                        name="explanation"
+                        control={control}
+                        render={({ field }) => (
+                            <ReactQuill 
+                                theme="snow"
+                                value={field.value || ''} 
+                                onChange={field.onChange} 
+                                modules={mainModules}
+                                className="h-32"
+                                placeholder="Jelaskan jawaban yang benar..."
+                            />
+                        )}
+                    />
+                </div>
+            </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
-            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
-                {editingQuestion ? 'Simpan Perubahan' : 'Buat Soal'}
-            </Button>
-          </div>
-
+            <div className="flex justify-end pt-4 border-t gap-2 bg-white sticky bottom-0">
+                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Batal</Button>
+                <Button type="submit" loading={createMutation.isPending || updateMutation.isPending} icon={Save}>
+                    Simpan Soal
+                </Button>
+            </div>
         </form>
       </Modal>
     </div>

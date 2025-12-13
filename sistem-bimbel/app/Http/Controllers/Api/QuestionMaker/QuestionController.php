@@ -15,10 +15,9 @@ class QuestionController extends Controller
     {
         $package = QuestionPackage::findOrFail($packageId);
         
-        // [FIX] Tambahkan with('answerOptions') di sini!
-        // Tanpa ini, frontend tidak akan menerima data opsi jawaban saat tombol Edit ditekan
+        // Mengambil soal beserta opsi jawaban dan kategorinya
         $questions = $package->questions()
-                             ->with('answerOptions') 
+                             ->with(['answerOptions', 'category']) 
                              ->orderBy('order_number')
                              ->get();
 
@@ -37,7 +36,8 @@ class QuestionController extends Controller
 
         $validator = Validator::make($request->all(), [
             'type' => 'required|in:single,multiple,weighted,short',
-            'category' => 'required|in:TWK,TIU,TKP,General',
+            // [FIX] Validasi ID Kategori (bukan enum 'category' lagi)
+            'question_category_id' => 'required|exists:question_categories,id',
             'question_text' => 'required|string',
             'point' => 'required|numeric|min:0',
             'duration_seconds' => 'nullable|integer|min:0',
@@ -56,9 +56,8 @@ class QuestionController extends Controller
 
             $question = $package->questions()->create([
                 'type' => $request->type,
-                // [BARU] Simpan Kategori
-                'category' => $request->category,
-
+                // [FIX] Simpan ID Kategori
+                'question_category_id' => $request->question_category_id,
                 'question_text' => $request->question_text,
                 'point' => $request->point,
                 'duration_seconds' => $request->duration_seconds ?? 60,
@@ -69,10 +68,15 @@ class QuestionController extends Controller
             // Simpan Opsi Jawaban
             if ($request->has('options')) {
                 foreach ($request->options as $opt) {
+                    // Skip opsi kosong jika bukan isian singkat
+                    if ($request->type !== 'short' && empty(trim($opt['option_text'] ?? $opt['text'] ?? ''))) {
+                        continue; 
+                    }
+
                     $question->answerOptions()->create([
                         'option_label' => $opt['label'] ?? null,
                         'option_text' => $opt['option_text'] ?? $opt['text'] ?? '', 
-                        'is_correct' => $opt['is_correct'] ?? false,
+                        'is_correct' => filter_var($opt['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN),
                         'weight' => $opt['weight'] ?? 0,
                     ]);
                 }
@@ -83,7 +87,7 @@ class QuestionController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Soal berhasil ditambahkan',
-                'data' => $question->load('answerOptions')
+                'data' => $question->load(['answerOptions', 'category'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -94,7 +98,7 @@ class QuestionController extends Controller
 
     public function show($packageId, $id)
     {
-        $question = Question::with('answerOptions')
+        $question = Question::with(['answerOptions', 'category'])
             ->where('question_package_id', $packageId)
             ->findOrFail($id);
 
@@ -107,6 +111,8 @@ class QuestionController extends Controller
 
         $validator = Validator::make($request->all(), [
             'type' => 'required|in:single,multiple,weighted,short',
+            // [FIX] Validasi ID Kategori saat update
+            'question_category_id' => 'required|exists:question_categories,id',
             'question_text' => 'required|string',
             'point' => 'required|numeric|min:0',
             'duration_seconds' => 'nullable|integer|min:0',
@@ -120,21 +126,27 @@ class QuestionController extends Controller
         try {
             $question->update([
                 'type' => $request->type,
+                // [FIX] Update ID Kategori
+                'question_category_id' => $request->question_category_id,
                 'question_text' => $request->question_text,
                 'point' => $request->point,
                 'duration_seconds' => $request->duration_seconds,
                 'explanation' => $request->explanation,
             ]);
 
-            // Update Opsi: Hapus semua lalu buat ulang
+            // Update Opsi: Hapus semua lalu buat ulang (Simple Strategy)
             if ($request->has('options')) {
                 $question->answerOptions()->delete();
                 
                 foreach ($request->options as $opt) {
+                    if ($request->type !== 'short' && empty(trim($opt['option_text'] ?? $opt['text'] ?? ''))) {
+                        continue;
+                    }
+
                     $question->answerOptions()->create([
                         'option_label' => $opt['label'] ?? null,
                         'option_text' => $opt['option_text'] ?? $opt['text'] ?? '',
-                        'is_correct' => $opt['is_correct'] ?? false,
+                        'is_correct' => filter_var($opt['is_correct'] ?? false, FILTER_VALIDATE_BOOLEAN),
                         'weight' => $opt['weight'] ?? 0,
                     ]);
                 }
@@ -144,7 +156,7 @@ class QuestionController extends Controller
             return response()->json([
                 'success' => true, 
                 'message' => 'Soal berhasil diperbarui', 
-                'data' => $question->load('answerOptions')
+                'data' => $question->load(['answerOptions', 'category'])
             ]);
 
         } catch (\Exception $e) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\QuestionMaker;
 
 use App\Http\Controllers\Controller;
 use App\Models\QuestionPackage;
+use App\Models\QuestionCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -34,15 +35,13 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
-            
-            // Validasi Passing Grade Kategori
-            'passing_grade_twk' => 'nullable|integer|min:0',
-            'passing_grade_tiu' => 'nullable|integer|min:0',
-            'passing_grade_tkp' => 'nullable|integer|min:0',
-            
             'max_attempts' => 'nullable|integer|min:1',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            
+            // Validasi Mode & Tanggal
+            'execution_mode' => 'required|in:flexible,live',
+            'start_date' => 'required_if:execution_mode,live|nullable|date',
+            'end_date' => 'required_if:execution_mode,live|nullable|date|after:start_date',
+            
             'is_active' => 'boolean',
         ]);
 
@@ -50,32 +49,41 @@ class QuestionPackageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // [FIX] Ambil semua data request, lalu set default untuk passing grade jika kosong
+        // Logic normalisasi data
         $data = $request->all();
-        $data['passing_grade_twk'] = $request->input('passing_grade_twk', 0);
-        $data['passing_grade_tiu'] = $request->input('passing_grade_tiu', 0);
-        $data['passing_grade_tkp'] = $request->input('passing_grade_tkp', 0);
+        
+        // Handle max attempts
+        if (isset($data['max_attempts']) && $data['max_attempts'] == 0) {
+            $data['max_attempts'] = null;
+        }
 
-        // Buat paket dengan SEMUA data
+        // [FIX DATE] Mencegah tanggal mundur di mode Flexible
+        // Kita ambil 10 karakter pertama (YYYY-MM-DD) untuk membuang jam/timezone
+        if ($request->execution_mode === 'flexible') {
+            if (!empty($data['start_date'])) {
+                $data['start_date'] = substr($data['start_date'], 0, 10); 
+            }
+            if (!empty($data['end_date'])) {
+                $data['end_date'] = substr($data['end_date'], 0, 10);
+            }
+        }
+
         $package = QuestionPackage::create($data);
 
         return response()->json([
             'success' => true,
-            'message' => 'Paket soal berhasil dibuat',
+            'message' => 'Paket soal berhasil dibuat.',
             'data' => $package
         ], 201);
     }
 
     public function show($id)
     {
-        $package = QuestionPackage::with(['program', 'questions'])->findOrFail($id);
-        
+        // Include 'categories' agar frontend bisa merender list kategori
+        $package = QuestionPackage::with(['program', 'questions', 'categories'])->findOrFail($id);
         $package->total_questions = $package->questions->count();
 
-        return response()->json([
-            'success' => true,
-            'data' => $package
-        ]);
+        return response()->json(['success' => true, 'data' => $package]);
     }
 
     public function update(Request $request, $id)
@@ -88,14 +96,13 @@ class QuestionPackageController extends Controller
             'description' => 'nullable|string',
             'duration_minutes' => 'required|integer|min:1',
             'passing_score' => 'required|integer|min:0',
-            
-            'passing_grade_twk' => 'nullable|integer|min:0',
-            'passing_grade_tiu' => 'nullable|integer|min:0',
-            'passing_grade_tkp' => 'nullable|integer|min:0',
-            
             'max_attempts' => 'nullable|integer|min:1',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
+            
+            // Validasi Mode & Tanggal
+            'execution_mode' => 'required|in:flexible,live',
+            'start_date' => 'required_if:execution_mode,live|nullable|date',
+            'end_date' => 'required_if:execution_mode,live|nullable|date|after:start_date',
+            
             'is_active' => 'boolean',
         ]);
 
@@ -103,11 +110,22 @@ class QuestionPackageController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        // [FIX] Sama seperti store, ambil semua data lalu merge default
         $data = $request->all();
-        $data['passing_grade_twk'] = $request->input('passing_grade_twk', 0);
-        $data['passing_grade_tiu'] = $request->input('passing_grade_tiu', 0);
-        $data['passing_grade_tkp'] = $request->input('passing_grade_tkp', 0);
+        
+        // Handle max attempts
+        if (isset($data['max_attempts']) && $data['max_attempts'] == 0) {
+            $data['max_attempts'] = null;
+        }
+
+        // [FIX DATE] Mencegah tanggal mundur di mode Flexible pada saat UPDATE
+        if ($request->execution_mode === 'flexible') {
+            if (!empty($data['start_date'])) {
+                $data['start_date'] = substr($data['start_date'], 0, 10);
+            }
+            if (!empty($data['end_date'])) {
+                $data['end_date'] = substr($data['end_date'], 0, 10);
+            }
+        }
 
         $package->update($data);
 
@@ -123,9 +141,69 @@ class QuestionPackageController extends Controller
         $package = QuestionPackage::findOrFail($id);
         $package->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Paket soal berhasil dihapus'
+        return response()->json(['success' => true, 'message' => 'Paket soal berhasil dihapus']);
+    }
+
+    // =========================================================================
+    // FITUR KATEGORI DINAMIS
+    // =========================================================================
+
+    public function addCategory(Request $request, $packageId)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'passing_grade' => 'required|integer|min:0',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $package = QuestionPackage::findOrFail($packageId);
+        
+        $category = $package->categories()->create([
+            'name' => $request->name,
+            'passing_grade' => $request->passing_grade
+        ]);
+
+        return response()->json([
+            'success' => true, 
+            'message' => 'Kategori berhasil ditambahkan', 
+            'data' => $category
+        ]);
+    }
+
+    public function updateCategory(Request $request, $packageId, $categoryId)
+    {
+        $category = QuestionCategory::where('question_package_id', $packageId)
+            ->where('id', $categoryId)
+            ->firstOrFail();
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'passing_grade' => 'required|integer|min:0',
+        ]);
+
+        $category->update($request->only(['name', 'passing_grade']));
+
+        return response()->json(['success' => true, 'message' => 'Kategori diperbarui']);
+    }
+
+    public function deleteCategory($packageId, $categoryId)
+    {
+        $category = QuestionCategory::where('question_package_id', $packageId)
+            ->where('id', $categoryId)
+            ->firstOrFail();
+
+        // Validasi: Jangan hapus jika ada soal yang terikat
+        if ($category->questions()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal hapus. Kategori ini sedang digunakan oleh soal.'
+            ], 400);
+        }
+
+        $category->delete();
+        return response()->json(['success' => true, 'message' => 'Kategori dihapus']);
     }
 }

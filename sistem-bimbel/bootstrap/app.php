@@ -18,7 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
          // ===== Custom Alias Middleware Kamu =====
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
-            'cbt.session' => \App\Http\Middleware\CBTSessionMiddleware::class,
+            'cbt.session' => \App\Http\Middleware\CheckCbtSession::class,
         ]);
 
         // ===== Sanctum Middleware for API Rate Limiting =====

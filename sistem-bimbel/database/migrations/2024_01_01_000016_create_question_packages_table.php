@@ -16,10 +16,12 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->integer('duration_minutes')->default(120); // Durasi pengerjaan
             $table->integer('passing_score')->default(0);
+            $table->integer('max_attempts')->nullable();
             
-            // [BARU] Durasi Tanggal Aktif
-            $table->date('start_date')->nullable(); 
-            $table->date('end_date')->nullable();
+            // Durasi Tanggal Aktif
+            $table->dateTime('start_date')->nullable(); 
+            $table->dateTime('end_date')->nullable();
+            $table->enum('execution_mode', ['flexible', 'live'])->default('flexible');
             
             $table->boolean('is_active')->default(true);
             $table->timestamps();
