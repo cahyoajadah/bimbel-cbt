@@ -7,8 +7,14 @@
     @apply border-border;
   }
   
+  html {
+    scroll-behavior: smooth;
+  }
+  
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    /* Font yang nyaman dibaca */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
@@ -18,22 +24,32 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - Modern Green Theme */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-lg;
+  @apply bg-gray-200 rounded-full;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  @apply bg-blue-400; /* Ini akan menjadi hijau kekuningan (Lime 400) dari config */
+}
+
+/* Sidebar Specific Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-gray-200;
 }
 
 /* Disable text selection in CBT */
@@ -66,4 +82,4 @@
 
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-} 
+}

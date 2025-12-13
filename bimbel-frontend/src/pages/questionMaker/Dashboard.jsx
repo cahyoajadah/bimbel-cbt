@@ -136,7 +136,7 @@ export default function Dashboard() {
           value={stats?.total_packages || 0} 
           icon={Package} 
           color={{ bg: 'bg-blue-100', text: 'text-blue-600' }}
-          subtext={`${stats?.active_packages || 0} Paket Sedang Tayang`}
+          subtext={`${stats?.active_packages || 0} Paket Terbuat`}
         />
         <StatCard 
           title="Laporan Masalah" 
