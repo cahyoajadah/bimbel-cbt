@@ -1,16 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
-// ... (Import ikon tetap sama, tidak ditampilkan untuk menghemat ruang)
 import { 
   LayoutDashboard, Package, Book, BookCopy, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
-  Clock, TrendingUp, X, Activity, Megaphone, Trophy
+  Clock, TrendingUp, X, Activity, Megaphone, Trophy,
+  Image as ImageIcon // [FIX] Import ikon Image dikembalikan
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore'; 
 import logoImage from '../../assets/logo2.png'; 
 
-// ... (menuItems object TETAP SAMA PERSIS, tidak diubah)
 const menuItems = {
   // Key role: 'admin_manajemen'
   'admin_manajemen': [
@@ -23,6 +22,8 @@ const menuItems = {
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },
     { path: '/admin/students', icon: Users, label: 'Siswa' },
     { path: '/admin/monitoring', icon: Activity, label: 'Monitoring' },
+    // [FIX] Menu ini dikembalikan
+    { path: '/admin/content-manager', icon: ImageIcon, label: 'Manajemen Konten' },
   ],
   
   // Key role: 'pembuat_soal'
@@ -46,7 +47,6 @@ const menuItems = {
   ],
 };
 
-
 export const Sidebar = () => {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar } = useUIStore();
@@ -56,7 +56,7 @@ export const Sidebar = () => {
 
   return (
     <>
-      {/* Mobile overlay - backdrop blur ditambahkan */}
+      {/* Mobile overlay - backdrop blur */}
       <div
         className={clsx(
           "fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-30 lg:hidden transition-opacity duration-300",
@@ -65,13 +65,7 @@ export const Sidebar = () => {
         onClick={toggleSidebar}
       />
 
-      {/* UBAH SIDEBAR STYLE:
-        1.  Dihapus `inset-y-0` dan `border-r`.
-        2.  Ditambahkan `top-4`, `bottom-4`, `left-4` (agar mengapung & punya jarak).
-        3.  Ditambahkan `rounded-2xl` (sudut membulat).
-        4.  Ditambahkan `shadow-[0_8px_30px_rgb(0,0,0,0.12)]` (bayangan lembut tapi dalam).
-        5.  Tinggi diatur dinamis `h-[calc(100vh-2rem)]`.
-      */}
+      {/* Sidebar - Floating Style */}
       <aside
         className={clsx(
           'fixed z-40 w-64 bg-white transform transition-all duration-300 ease-in-out flex flex-col',
@@ -119,12 +113,11 @@ export const Sidebar = () => {
                     <Link
                       key={item.path}
                       to={item.path}
-                      // UBAH MENU ITEM STYLE: Lebih interaktif dan halus
                       className={clsx(
                         'flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-300 group relative overflow-hidden',
                         isActive
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 translate-x-1' // Aktif: Biru solid, bayangan biru, sedikit bergeser ke kanan
-                          : 'text-gray-600 hover:bg-blue-50 hover:text-blue-700 hover:shadow-sm hover:translate-x-1' // Inaktif: Hover effect halus
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30 translate-x-1' 
+                          : 'text-gray-600 hover:bg-blue-50 hover:text-blue-700 hover:shadow-sm hover:translate-x-1' 
                       )}
                     >
                       {/* Efek gelombang saat hover pada menu inaktif */}
@@ -149,7 +142,7 @@ export const Sidebar = () => {
             )}
           </nav>
 
-          {/* User Info Footer (Contoh tambahan untuk mempercantik) */}
+          {/* User Info Footer */}
           <div className="p-4 m-4 bg-blue-50/80 rounded-2xl border border-blue-100/50 shrink-0">
              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-blue-400 flex items-center justify-center text-white font-bold text-sm shadow-sm">
