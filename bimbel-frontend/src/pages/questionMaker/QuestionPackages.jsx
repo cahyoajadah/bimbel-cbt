@@ -252,8 +252,8 @@ export default function QuestionPackages() {
           setValue('start_date', formatToWIBInput(pkg.start_date)); 
           setValue('end_date', formatToWIBInput(pkg.end_date));
       } else {
-          setValue('start_date', formatDateOnlyWIB(pkg.start_date));
-          setValue('end_date', formatDateOnlyWIB(pkg.end_date));
+          setValue('start_date', formatToWIBInput(pkg.start_date));
+          setValue('end_date', formatToWIBInput(pkg.end_date));
       }
 
     } else {
@@ -524,7 +524,8 @@ export default function QuestionPackages() {
                 <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Mulai</label>
                     <input 
-                        type={executionMode === 'live' ? "datetime-local" : "date"} 
+                        type = "datetime-local"
+                        // type={executionMode === 'live' ? "datetime-local" : "date"} 
                         className="w-full border rounded p-2 text-sm bg-white"
                         {...register('start_date', { required: executionMode === 'live' ? 'Wajib diisi untuk Live' : false })} 
                     />
@@ -533,7 +534,8 @@ export default function QuestionPackages() {
                 <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Selesai</label>
                     <input 
-                        type={executionMode === 'live' ? "datetime-local" : "date"}
+                        type="datetime-local"
+                        // type={executionMode === 'live' ? "datetime-local" : "date"}
                         className="w-full border rounded p-2 text-sm bg-white"
                         {...register('end_date', { required: executionMode === 'live' ? 'Wajib diisi untuk Live' : false })} 
                     />

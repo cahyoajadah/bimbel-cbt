@@ -57,16 +57,16 @@ class QuestionPackageController extends Controller
             $data['max_attempts'] = null;
         }
 
-        // [FIX DATE] Mencegah tanggal mundur di mode Flexible
-        // Kita ambil 10 karakter pertama (YYYY-MM-DD) untuk membuang jam/timezone
-        if ($request->execution_mode === 'flexible') {
-            if (!empty($data['start_date'])) {
-                $data['start_date'] = substr($data['start_date'], 0, 10); 
-            }
-            if (!empty($data['end_date'])) {
-                $data['end_date'] = substr($data['end_date'], 0, 10);
-            }
-        }
+        // // [FIX DATE] Mencegah tanggal mundur di mode Flexible
+        // // Kita ambil 10 karakter pertama (YYYY-MM-DD) untuk membuang jam/timezone
+        // if ($request->execution_mode === 'flexible') {
+        //     if (!empty($data['start_date'])) {
+        //         $data['start_date'] = substr($data['start_date'], 0, 10); 
+        //     }
+        //     if (!empty($data['end_date'])) {
+        //         $data['end_date'] = substr($data['end_date'], 0, 10);
+        //     }
+        // }
 
         $package = QuestionPackage::create($data);
 
@@ -117,15 +117,15 @@ class QuestionPackageController extends Controller
             $data['max_attempts'] = null;
         }
 
-        // [FIX DATE] Mencegah tanggal mundur di mode Flexible pada saat UPDATE
-        if ($request->execution_mode === 'flexible') {
-            if (!empty($data['start_date'])) {
-                $data['start_date'] = substr($data['start_date'], 0, 10);
-            }
-            if (!empty($data['end_date'])) {
-                $data['end_date'] = substr($data['end_date'], 0, 10);
-            }
-        }
+        // // [FIX DATE] Mencegah tanggal mundur di mode Flexible pada saat UPDATE
+        // if ($request->execution_mode === 'flexible') {
+        //     if (!empty($data['start_date'])) {
+        //         $data['start_date'] = substr($data['start_date'], 0, 10);
+        //     }
+        //     if (!empty($data['end_date'])) {
+        //         $data['end_date'] = substr($data['end_date'], 0, 10);
+        //     }
+        // }
 
         $package->update($data);
 
