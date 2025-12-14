@@ -24,6 +24,7 @@ const menuItems = {
     { path: '/admin/monitoring', icon: Activity, label: 'Monitoring' },
     // [FIX] Menu ini dikembalikan
     { path: '/admin/content-manager', icon: ImageIcon, label: 'Manajemen Konten' },
+    { path: '/admin/profile', icon: Users, label: 'Profil' },
   ],
   
   // Key role: 'pembuat_soal'
@@ -31,6 +32,7 @@ const menuItems = {
     { path: '/question-maker/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/question-maker/packages', icon: Package, label: 'Paket Soal' },
     { path: '/question-maker/reports', icon: ClipboardList, label: 'Pengaduan Soal' },
+    { path: '/question-maker/profile', icon: Users, label: 'Profil' },
   ],
   
   // Key role: 'siswa'

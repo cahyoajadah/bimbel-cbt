@@ -21,12 +21,14 @@ import AdminAnnouncements from '../pages/admin/Announcements';
 import AdminTeachers from '../pages/admin/Teachers';
 import AdminStudents from '../pages/admin/Students';
 import AdminMonitoring from '../pages/admin/Monitoring';
+import AdminProfile from '../pages/admin/Profile';
 
 // Question Maker Pages 
 import QuestionMakerDashboard from '../pages/questionMaker/Dashboard';
 import QuestionPackages from '../pages/questionMaker/QuestionPackages';
 import Questions from '../pages/questionMaker/Questions';
 import QuestionReports from '../pages/questionMaker/Reports';
+import QuestionMakerProfile from '../pages/questionMaker/Profile';
 
 // Student Pages  
 import StudentDashboard from '../pages/student/Dashboard';
@@ -92,6 +94,7 @@ function AppRoutes() {
                     <Route path="students" element={<AdminStudents />} />
                     <Route path="monitoring" element={<AdminMonitoring />} /> 
                     <Route path="content-manager" element={<ContentManager />} />
+                    <Route path="profile" element={<AdminProfile />} />
                     <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
                   </Routes>
                 </DashboardLayout>
@@ -112,6 +115,7 @@ function AppRoutes() {
                     <Route path="packages" element={<QuestionPackages />} />
                     <Route path="packages/:packageId/questions" element={<Questions />} />
                     <Route path="reports" element={<QuestionReports />} />
+                    <Route path="profile" element={<QuestionMakerProfile />} />
                     <Route path="*" element={<Navigate to="/question-maker/dashboard" replace />} />
                   </Routes>
                 </DashboardLayout>
