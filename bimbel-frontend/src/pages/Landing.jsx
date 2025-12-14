@@ -32,10 +32,22 @@ const WA_CONFIG = {
 const DUMMY_CONTENT = {
   HERO_DESCRIPTION: "Platform bimbingan belajar online terpercaya untuk persiapan UTBK, SKD, dan CPNS dengan metode pembelajaran modern dan interaktif. Raih skor terbaikmu bersama National Academy!",
   PROGRAMS: [
-    { id: 1, title: 'Program UTBK Intensif', content: 'In vitae odio sit amet magna auctor congue. Nam nec mi non nulla dictum mollis ac sit amet quam.' },
-    { id: 2, title: 'Pelatihan SKD CPNS', content: 'Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Duis a tristique dolor.' },
-    { id: 3, title: 'Bimbingan Sekolah Kedinasan', content: 'Nunc vel enim ac dui laoreet luctus. Sed sit amet justo eu nulla pulvinar dignissim non eget magna.' },
-  ],
+  {
+    id: 1,
+    title: 'Program UTBK Intensif',
+    content: 'Program persiapan UTBK dengan sistem belajar terarah, soal HOTS terbaru, tryout berkala, dan pembahasan mendalam untuk memaksimalkan peluang lolos PTN impian.'
+  },
+  {
+    id: 2,
+    title: 'Pelatihan SKD CPNS',
+    content: 'Pelatihan fokus SKD CPNS (TWK, TIU, TKP) dengan materi terupdate, latihan berbasis CAT, serta analisis nilai untuk meningkatkan skor secara signifikan.'
+  },
+  {
+    id: 3,
+    title: 'Bimbingan Sekolah Kedinasan',
+    content: 'Bimbingan komprehensif masuk Sekolah Kedinasan mulai dari akademik, psikotes, hingga tes karakter dan wawancara, dibimbing oleh mentor berpengalaman.'
+  },
+],
   FEATURES: [
     { id: 1, title: 'Modul Belajar Digital', content: 'Tersedia ribuan modul dan materi belajar yang terstruktur, siap diakses kapan saja dan di mana saja.' },
     { id: 2, title: 'Tryout Berbasis CBT', content: 'Simulasi ujian Computer Based Test (CBT) yang akurat dan mirip dengan aslinya untuk mengukur kesiapanmu.' },
@@ -230,9 +242,9 @@ export default function Landing() {
                 Mulai Belajar
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Link>
-              <button className="px-8 py-3 border-2 border-blue-600 text-blue-600 rounded-full font-semibold hover:bg-blue-50 transition-colors shadow-md">
+              {/* <button className="px-8 py-3 border-2 border-blue-600 text-blue-600 rounded-full font-semibold hover:bg-blue-50 transition-colors shadow-md">
                 Lihat Program
-              </button>
+              </button> */}
             </div>
           </div>
 
@@ -273,10 +285,10 @@ export default function Landing() {
                   className="text-gray-600 mb-6 leading-relaxed min-h-[72px] prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: program.content }}
                 />
-                <button className="text-blue-600 font-bold hover:text-blue-700 flex items-center transition-colors">
+                {/* <button className="text-blue-600 font-bold hover:text-blue-700 flex items-center transition-colors">
                   Pelajari Lebih Lanjut
                   <ArrowRight className="ml-2 w-4 h-4" />
-                </button>
+                </button> */}
               </div>
             ))}
           </div>
@@ -411,7 +423,7 @@ export default function Landing() {
             to="/login"
             className="inline-flex items-center px-10 py-4 bg-white text-blue-600 rounded-full hover:bg-gray-100 transition-colors duration-300 font-extrabold text-lg shadow-2xl shadow-blue-900/40"
           >
-            Daftar Sekarang
+            Mulai Belajar
             <ArrowRight className="ml-2 w-6 h-6" />
           </Link>
         </div>
