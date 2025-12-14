@@ -20,6 +20,7 @@ import AdminSchedules from '../pages/admin/Schedules';
 import AdminAnnouncements from '../pages/admin/Announcements';
 import AdminTeachers from '../pages/admin/Teachers';
 import AdminStudents from '../pages/admin/Students';
+import InternalUsers from '../pages/admin/InternalUsers';
 import AdminMonitoring from '../pages/admin/Monitoring';
 import AdminProfile from '../pages/admin/Profile';
 
@@ -92,6 +93,7 @@ function AppRoutes() {
                     <Route path="announcements" element={<AdminAnnouncements />} />
                     <Route path="teachers" element={<AdminTeachers />} />
                     <Route path="students" element={<AdminStudents />} />
+                    <Route path="staff" element={<InternalUsers />} />
                     <Route path="monitoring" element={<AdminMonitoring />} /> 
                     <Route path="content-manager" element={<ContentManager />} />
                     <Route path="profile" element={<AdminProfile />} />

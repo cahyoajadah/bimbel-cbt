@@ -1,23 +1,16 @@
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { User, Mail, Phone, Lock, Save, BookOpen } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { User, Mail, Lock, Save, Shield } from 'lucide-react';
 import api from '../../api/axiosConfig';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 
-export default function Profile() {
+export default function AdminProfile() {
   const queryClient = useQueryClient();
-
-  // 1. Fetch User Data
-  const { data: userData, isLoading } = useQuery({
-    queryKey: ['profile'],
-    queryFn: async () => {
-      const res = await api.get('/auth/profile');
-      return res.data.data;
-    },
-  });
+  const { user: userData, checkAuth } = useAuthStore(); // Gunakan data dari store langsung agar lebih cepat
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm();
 
@@ -26,10 +19,8 @@ export default function Profile() {
     if (userData) {
       setValue('name', userData.name);
       setValue('email', userData.email);
-      setValue('phone', userData.phone);
-      
-      const programName = userData.student?.programs?.[0]?.name || '-';
-      setValue('program_name', programName); 
+      // Admin mungkin tidak punya 'phone' di semua sistem, tapi kita biarkan jika ada kolomnya di DB
+      // setValue('phone', userData.phone || ''); 
 
       // Paksa kosongkan password agar tidak kena autofill
       setValue('password', '');
@@ -40,11 +31,10 @@ export default function Profile() {
   // 2. Update Mutation
   const updateMutation = useMutation({
     mutationFn: async (data) => {
-      // Kita bisa pakai JSON biasa karena tidak ada file upload lagi
       const payload = {
           name: data.name,
-          phone: data.phone,
-          _method: 'PUT' // Tetap kirim ini untuk konsistensi route Laravel
+          // phone: data.phone, // Uncomment jika tabel users punya kolom phone
+          _method: 'PUT' 
       };
 
       // Hanya kirim password jika diisi
@@ -58,6 +48,7 @@ export default function Profile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['profile']);
+      checkAuth(); // Refresh user data di store
       toast.success('Profil berhasil diperbarui');
       setValue('password', ''); 
       setValue('password_confirmation', '');
@@ -77,18 +68,20 @@ export default function Profile() {
     updateMutation.mutate(data);
   };
 
-  if (isLoading) return <div className="p-8 text-center">Memuat profil...</div>;
+  if (!userData) return <div className="p-8 text-center">Memuat profil...</div>;
 
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <User className="text-blue-600" /> Profil Saya
+          <User className="text-blue-600" /> Profil Admin
       </h1>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {/* Header Biru Sederhana */}
-        <div className="h-24 bg-gradient-to-r from-blue-500 to-blue-600 flex items-center px-8">
-            <h2 className="text-white text-xl font-bold">Pengaturan Akun</h2>
+        <div className="h-24 bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center px-8">
+            <h2 className="text-white text-xl font-bold flex items-center gap-2">
+                <Shield className="text-blue-200" /> Pengaturan Akun
+            </h2>
         </div>
 
         <div className="p-8">
@@ -124,12 +117,7 @@ export default function Profile() {
                             <p className="text-xs text-gray-500 mt-1">*Email tidak dapat diubah.</p>
                         </div>
 
-                        <Input 
-                            label="Nomor Telepon" 
-                            type="tel"
-                            icon={Phone}
-                            {...register('phone')}
-                        />
+                        {/* Admin tidak menampilkan Program/Kelas */}
                     </div>
 
                     {/* Kolom Kanan: Ganti Password */}
@@ -164,7 +152,7 @@ export default function Profile() {
                     <Button 
                         type="submit" 
                         loading={updateMutation.isPending} 
-                        className="px-8"
+                        className="px-8 bg-blue-600 hover:bg-blue-700"
                         icon={Save}
                     >
                         Simpan Perubahan

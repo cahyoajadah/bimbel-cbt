@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Package, Book, BookCopy, BookOpen, Calendar, Users, 
   MessageSquare, FileText, ClipboardList, Video, GraduationCap,
-  Clock, TrendingUp, X, Activity, Megaphone, Trophy,
+  Clock, TrendingUp, X, Activity, Megaphone, Trophy, Briefcase,
   Image as ImageIcon // [FIX] Import ikon Image dikembalikan
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -21,6 +21,7 @@ const menuItems = {
     { path: '/admin/announcements', icon: Megaphone, label: "Pengumuman" },
     { path: '/admin/teachers', icon: GraduationCap, label: 'Pembimbing' },
     { path: '/admin/students', icon: Users, label: 'Siswa' },
+    { path: '/admin/staff', icon: Briefcase, label: 'Staff' },
     { path: '/admin/monitoring', icon: Activity, label: 'Monitoring' },
     // [FIX] Menu ini dikembalikan
     { path: '/admin/content-manager', icon: ImageIcon, label: 'Manajemen Konten' },

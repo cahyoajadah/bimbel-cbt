@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Admin\TeacherController;
 use App\Http\Controllers\Api\Admin\StudentController;
 use App\Http\Controllers\Api\Admin\FeedbackController;
 use App\Http\Controllers\Api\Admin\AnnouncementController as AdminAnnouncement;
+use App\Http\Controllers\Api\Admin\UserManagementController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionPackageController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionController;
 use App\Http\Controllers\Api\QuestionMaker\QuestionReportController;
@@ -85,6 +86,10 @@ Route::middleware(['auth:sanctum', 'role:admin_manajemen'])
         Route::get('feedbacks/{id}', [FeedbackController::class, 'show']);
         Route::put('feedbacks/{id}', [FeedbackController::class, 'update']);
         Route::delete('feedbacks/{id}', [FeedbackController::class, 'destroy']);
+
+        Route::get('/users-manage', [UserManagementController::class, 'index']);
+        Route::post('/users-manage', [UserManagementController::class, 'store']);
+        Route::delete('/users-manage/{id}', [UserManagementController::class, 'destroy']);
     });
 
 // ADMIN PEMBUAT SOAL ROUTES
