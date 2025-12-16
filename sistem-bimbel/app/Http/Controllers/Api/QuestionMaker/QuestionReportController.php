@@ -12,7 +12,7 @@ class QuestionReportController extends Controller
 {
     public function index(Request $request)
     {
-        $query = QuestionReport::with(['question.questionPackage', 'student.user']);
+        $query = QuestionReport::with(['question.package', 'student.user']);
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
